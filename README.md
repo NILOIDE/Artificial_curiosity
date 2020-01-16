@@ -1,2 +1,2 @@
 # Adversarial_curiosity
-Research repository for my Master thesis on Adversarial curiosity
+Repository for my Master thesis on Adversarial curiosity
