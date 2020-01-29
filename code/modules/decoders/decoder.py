@@ -5,6 +5,7 @@ import torch.nn as nn
 class BaseDecoder(nn.Module):
 
     def __init__(self, z_dim, x_dim, device='cpu'):
+        # type: (tuple, tuple, str) -> None
         super().__init__()
         self.z_dim = z_dim
         self.x_dim = x_dim

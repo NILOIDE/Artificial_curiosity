@@ -58,6 +58,9 @@ class BaseWorldModel(nn.Module):
 
     def action_index_to_onehot(self, a_i):
         # type: (torch.Tensor) -> torch.Tensor
+        """"
+        Given an action's index, return a one-hot vector where the action in question has the value 1.
+        """
         assert type(a_i) == torch.Tensor
         batch_size = a_i.shape[0]
         one_hot = torch.zeros((batch_size, self.a_dim[0]), device=self.device)

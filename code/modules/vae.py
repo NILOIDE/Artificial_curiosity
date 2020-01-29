@@ -47,18 +47,25 @@ class VAE(nn.Module):
 
         return sampled_imgs, im_means
 
-    def forward_mean_only(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_no_sampling(self, x: torch.Tensor) -> torch.Tensor:
         """"
         Forward pass for whenever we are interested in seeing the reconstruction
         of the mean of the latent distribution.
         """
         with torch.no_grad():
             mu, _ = self.encoder(x)
-            return self.decoder(mu)
+            y = self.decoder(mu)
+        return y
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            return self.decoder(z)
+            y = self.decoder(z)
+        return y
+
+    def encode(self, x: torch.Tensor) -> [torch.Tensor, torch.Tensor]:
+        with torch.no_grad():
+            mu, log_sigma = self.encoder(x)
+        return mu, log_sigma
 
 
 if __name__ == "__main__":
