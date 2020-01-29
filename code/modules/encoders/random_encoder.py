@@ -1,46 +1,6 @@
 import torch
 import torch.nn as nn
-
-STANDARD_CONV = ({'channel_num': 32, 'kernel_size': 8, 'stride': 4, 'padding': 0},
-                 {'channel_num': 64, 'kernel_size': 4, 'stride': 2, 'padding': 0},
-                 {'channel_num': 64, 'kernel_size': 3, 'stride': 1, 'padding': 0})
-
-
-class BaseEncoder(nn.Module):
-
-    class Flatten(torch.nn.Module):
-        def forward(self, x):
-            return x.view(x.size()[0], -1)
-
-    def __init__(self, x_dim, z_dim, device='cpu'):
-        # type: (tuple, tuple, str) -> None
-        """"
-        This is the base class for the encoders below. Contains all the required shared variables and functions.
-        """
-        super().__init__()
-        self.x_dim = x_dim
-        self.z_dim = z_dim
-        print('Encoder has dimensions:', x_dim, '->', z_dim)
-        if device in {'cuda', 'cpu'}:
-            self.device = device
-            self.cuda = True if device == 'cuda' else False
-
-    def apply_tensor_constraints(self, x):
-        assert type(x) == torch.Tensor
-        if len(tuple(x.shape)) != 3 and len(tuple(x.shape)) != 4:
-            raise ValueError("Encoder input tensor should be 3D (single image) or 4D (batch).")
-        if len(tuple(x.shape)) == 3:  # Add batch dimension to 1D tensor
-            x = x.unsqueeze(0)
-        if self.cuda and not x.is_cuda:
-            x = x.to(self.device)
-        assert tuple(x.shape[-3:]) == self.x_dim
-        return x
-
-    def get_z_dim(self) -> tuple:
-        return self.z_dim
-
-    def get_x_dim(self) -> tuple:
-        return self.x_dim
+from modules.encoders.base_encoder import BaseEncoder
 
 
 class RandomEncoder_1D(BaseEncoder):
@@ -111,7 +71,7 @@ class RandomEncoder_1D_sigma(BaseEncoder):
 
 class RandomEncoder_2D(BaseEncoder):
 
-    def __init__(self, x_dim=(3, 84, 84), conv_layers=STANDARD_CONV, fc_dim=512, z_dim=(20,), device='cpu'):
+    def __init__(self, x_dim=(3, 84, 84), conv_layers=None, fc_dim=512, z_dim=(20,), device='cpu'):
         # type: (tuple, tuple, int, tuple, str) -> None
         """"
         This enconder has static weights as no gradients will be calculated. It provides static features.
@@ -119,11 +79,12 @@ class RandomEncoder_2D(BaseEncoder):
         Only one fully-connected layer is used. The latent representation is assumed to be Gaussian.
         """
         super().__init__(x_dim, z_dim, device)
+        self.conv_layers = self.STANDARD_CONV if conv_layers is None else conv_layers
         self.layers = []
         prev_channels = self.x_dim[0]
         prev_dim_x = self.x_dim[1]
         prev_dim_y = self.x_dim[2]
-        for layer in conv_layers:
+        for layer in self.conv_layers:
             self.layers.append(nn.Conv2d(prev_channels,
                                          layer['channel_num'],
                                          kernel_size=layer['kernel_size'],
@@ -131,7 +92,6 @@ class RandomEncoder_2D(BaseEncoder):
                                          padding=layer['padding']))
             self.layers.append(nn.ReLU())
             prev_channels = layer['channel_num']
-            # TODO: Check that these calculations are correct
             prev_dim_x = (prev_dim_x + 2 * layer['padding'] - (layer['kernel_size'])) // layer['stride'] + 1
             prev_dim_y = (prev_dim_y + 2 * layer['padding'] - (layer['kernel_size'])) // layer['stride'] + 1
         self.layers.append(self.Flatten())
@@ -154,7 +114,7 @@ class RandomEncoder_2D(BaseEncoder):
 
 class RandomEncoder_2D_sigma(BaseEncoder):
 
-    def __init__(self, x_dim=(3, 84, 84), conv_layers=STANDARD_CONV, fc_dim=512, z_dim=(20,), device='cpu'):
+    def __init__(self, x_dim=(3, 84, 84), conv_layers=None, fc_dim=512, z_dim=(20,), device='cpu'):
         # type: (tuple, tuple, int, tuple, str) -> None
         """"
         This enconder has static weights as no gradients will be calculated. It provides static features.
@@ -162,11 +122,12 @@ class RandomEncoder_2D_sigma(BaseEncoder):
         Only one fully-connected layer is used. The latent representation is assumed to be Gaussian.
         """
         super().__init__(x_dim, z_dim, device)
+        self.conv_layers = self.STANDARD_CONV if conv_layers is None else conv_layers
         self.layers = []
         prev_channels = x_dim[0]
         prev_dim_x = x_dim[1]
         prev_dim_y = x_dim[2]
-        for layer in conv_layers:
+        for layer in self.conv_layers:
             self.layers.append(nn.Conv2d(prev_channels,
                                          layer['channel_num'],
                                          kernel_size=layer['kernel_size'],
@@ -174,7 +135,6 @@ class RandomEncoder_2D_sigma(BaseEncoder):
                                          padding=layer['padding']))
             self.layers.append(nn.ReLU())
             prev_channels = layer['channel_num']
-            # TODO: Check that these calculations are correct
             prev_dim_x = (prev_dim_x + 2 * layer['padding'] - (layer['kernel_size'] - 1)) // layer['stride'] + 1
             prev_dim_y = (prev_dim_y + 2 * layer['padding'] - (layer['kernel_size'] - 1)) // layer['stride'] + 1
         self.layers.append(self.Flatten())
@@ -203,18 +163,20 @@ class RandomEncoder_2D_sigma(BaseEncoder):
         return mean, log_sigma
 
 
-def create_conv_layer_dict(params: tuple) -> dict:
-    return {'channel_num': params[0],
-            'kernel_size': params[1],
-            'stride': params[2],
-            'padding': params[3]}
-
-
 if __name__ == "__main__":
+
+    #################### MNIST PERFORMANCE TEST ###############################
+
     import torchvision.datasets as datasets
     import torchvision.transforms as transforms
     import torchvision
     from modules.decoders.decoder import Decoder
+
+    def create_conv_layer_dict(params: tuple) -> dict:
+        return {'channel_num': params[0],
+                'kernel_size': params[1],
+                'stride': params[2],
+                'padding': params[3]}
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Device:', device)
