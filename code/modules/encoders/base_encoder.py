@@ -25,7 +25,7 @@ class BaseEncoder(nn.Module):
             self.device = device
             self.cuda = True if device == 'cuda' else False
 
-    def apply_tensor_constraints(self, x):
+    def apply_tensor_constraints(self, x: torch.Tensor) -> torch.Tensor:
         assert type(x) == torch.Tensor
         if len(tuple(x.shape)) != 3 and len(tuple(x.shape)) != 4:
             raise ValueError("Encoder input tensor should be 3D (single image) or 4D (batch).")

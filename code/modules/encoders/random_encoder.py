@@ -171,6 +171,7 @@ if __name__ == "__main__":
     import torchvision.transforms as transforms
     import torchvision
     from modules.decoders.decoder import Decoder
+    import os
 
     def create_conv_layer_dict(params: tuple) -> dict:
         return {'channel_num': params[0],
@@ -180,8 +181,10 @@ if __name__ == "__main__":
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Device:', device)
-    mnist_trainset = datasets.MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
-    mnist_testset = datasets.MNIST(root='./data', train=False, download=True, transform=transforms.ToTensor())
+    root_path = os.getcwd().partition("Adversarial_curiosity\code")
+    data_path = root_path[0] + root_path[1] + "\data"
+    mnist_trainset = datasets.MNIST(root=data_path, train=True, download=True, transform=transforms.ToTensor())
+    mnist_testset = datasets.MNIST(root=data_path, train=False, download=True, transform=transforms.ToTensor())
     train_data = torch.utils.data.DataLoader(mnist_trainset, batch_size=32, shuffle=True)
     ex = mnist_testset[0][0]
     x_dim = tuple(ex.shape)

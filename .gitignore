@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # My stuff
-code/modules/encoders/data/
+code/data/
 
 # C extensions
 *.so

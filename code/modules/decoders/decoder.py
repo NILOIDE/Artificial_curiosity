@@ -13,7 +13,7 @@ class BaseDecoder(nn.Module):
             self.device = device
             self.cuda = True if device == 'cuda' else False
 
-    def apply_tensor_constraints(self, z):
+    def apply_tensor_constraints(self, z: torch.Tensor) -> torch.Tensor:
         assert type(z) == torch.Tensor
         assert z.shape[-1] == self.z_dim[0]
         if len(tuple(z.shape)) != 1 and len(tuple(z.shape)) != 2:
@@ -28,6 +28,7 @@ class BaseDecoder(nn.Module):
 class Decoder(BaseDecoder):
 
     def __init__(self, z_dim, x_dim, hidden_dim=(512, 512), device='cpu'):
+        # type: (tuple, tuple, tuple, str) -> None
         super().__init__(z_dim, x_dim, device)
         self.y_dim = x_dim[0] * x_dim[1] * x_dim[2]
         h_dim_prev = z_dim[0]
@@ -40,7 +41,7 @@ class Decoder(BaseDecoder):
         self.layers.append(nn.Sigmoid())
         self.model = nn.Sequential(*self.layers).to(self.device)
 
-    def forward(self, z):
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
         """
         Perform forward pass of decoder.
         Returns mean with shape [batch_size, 784].
