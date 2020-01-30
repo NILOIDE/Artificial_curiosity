@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class BaseEncoder(nn.Module):
 
-    class Flatten(torch.nn.Module):
+    class Flatten(nn.Module):
         def forward(self, x):
             return x.view(x.size()[0], -1)
 

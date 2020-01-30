@@ -26,8 +26,8 @@ class Encoder_2D(BaseEncoder):
                                          padding=layer['padding']))
             self.layers.append(nn.ReLU())
             prev_channels = layer['channel_num']
-            prev_dim_x = (prev_dim_x + 2 * layer['padding'] - (layer['kernel_size'] - 1)) // layer['stride'] + 1
-            prev_dim_y = (prev_dim_y + 2 * layer['padding'] - (layer['kernel_size'] - 1)) // layer['stride'] + 1
+            prev_dim_x = (prev_dim_x + 2 * layer['padding'] - layer['kernel_size']) // layer['stride'] + 1
+            prev_dim_y = (prev_dim_y + 2 * layer['padding'] - layer['kernel_size']) // layer['stride'] + 1
         self.layers.append(self.Flatten())
         self.layers.append(nn.Linear(prev_dim_x * prev_dim_y * prev_channels, fc_dim))
         self.layers.append(nn.ReLU())

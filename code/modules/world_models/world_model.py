@@ -24,7 +24,8 @@ class BaseWorldModel(nn.Module):
             self.device = device
             self.cuda = True if device == 'cuda' else False
 
-    def apply_tensor_constraints(self, x, name):
+    def apply_tensor_constraints(self, x, name=''):
+        # type: (torch.Tensor, str) -> torch.Tensor
         assert type(x) == torch.Tensor
         if len(tuple(x.shape)) != 1 and len(tuple(x.shape)) != 2:
             if name != '':
@@ -130,19 +131,19 @@ class WorldModel_Sigma(BaseWorldModel):
         # St.dev. can't be negative, thus ReLU
         self.sigma_head = nn.Sequential(nn.Linear(h_dim_prev, x_dim[0]), nn.ReLU()).to(self.device)
 
-    def forward(self, mu_t, sigma_t, a_t):
+    def forward(self, mu_t, log_sigma_t, a_t):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor, torch.Tensor]
         """
         Perform forward pass of world model. Means and variances are returned
         Make sure that any constraints are enforced.
         """
         mu_t = self.apply_state_constraints(mu_t)                    # Make sure dimensions are correct
-        sigma_t = self.apply_state_constraints(sigma_t)              # Make sure dimensions are correct
+        log_sigma_t = self.apply_state_constraints(log_sigma_t)              # Make sure dimensions are correct
         a_t = self.apply_action_constraints(a_t)                     # Make sure dimensions are correct
-        assert sigma_t.shape == mu_t.shape                           # Each latent has a mu-sigma pair
+        assert log_sigma_t.shape == mu_t.shape                           # Each latent has a mu-sigma pair
         assert mu_t.shape[0] == a_t.shape[0]                         # Same batch size
 
-        xa_t = torch.cat((mu_t, sigma_t, a_t), dim=1)
+        xa_t = torch.cat((mu_t, log_sigma_t, a_t), dim=1)
         assert xa_t.shape[0] == mu_t.shape[0]                        # Same batch size
         assert xa_t.shape[1] == self.input_dim[0]                    # Dimensions of model input
         out = self.shared_layers(xa_t)

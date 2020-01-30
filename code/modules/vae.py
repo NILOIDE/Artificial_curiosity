@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from modules.encoders.learned_encoders import Encoder_2D
-from modules.decoders.decoder import Decoder
+from modules.decoders.decoder import Decoder_1D, Decoder_2D
 
 
 class VAE(nn.Module):
@@ -12,7 +12,7 @@ class VAE(nn.Module):
         self.x_dim = x_dim
         self.z_dim = z_dim
         self.encoder = Encoder_2D(x_dim=x_dim, conv_layers=conv_layers, z_dim=z_dim, device=device)  # type: Encoder_2D
-        self.decoder = Decoder(z_dim=z_dim, x_dim=x_dim, device=device)
+        self.decoder = Decoder_1D(z_dim=z_dim, x_dim=x_dim, device=device)
         self.loss = nn.BCELoss(reduction='none')
 
     def forward(self, x):
@@ -31,7 +31,7 @@ class VAE(nn.Module):
         l_recon = torch.sum(self.loss(im_recon, target), dim=(1,2,3))
         average_negative_elbo = torch.mean(l_recon + l_reg, dim=0)
 
-        return average_negative_elbo, z, im_recon
+        return average_negative_elbo, z, im_recon, mu, log_sigma
 
     def sample(self, n_samples):
         # type: (int) ->  [torch.Tensor, torch.Tensor]
@@ -67,6 +67,11 @@ class VAE(nn.Module):
             mu, log_sigma = self.encoder(x)
         return mu, log_sigma
 
+    def get_x_dim(self) -> tuple:
+        return self.x_dim
+
+    def get_z_dim(self) -> tuple:
+        return self.z_dim
 
 if __name__ == "__main__":
 
@@ -98,7 +103,7 @@ if __name__ == "__main__":
     for i, (batch, target) in enumerate(train_data):
         batch = batch.to(device)
         vae.zero_grad()
-        loss, _, _ = vae(batch)
+        loss, _, _, _, _ = vae(batch)
         if i % 200 == 0:
             print(i, loss.item())
         loss.backward()

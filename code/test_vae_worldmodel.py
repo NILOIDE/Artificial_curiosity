@@ -4,95 +4,97 @@ import torch.nn as nn
 import gym
 import numpy as np
 from modules.replay_buffers.replay_buffer import ReplayBuffer
-from modules.encoders.random_encoder import RandomEncoder_2D
-from modules.world_models.world_model import WorldModel, WorldModel_Recurrent
-from modules.decoders.decoder import Decoder_1D
+from modules.vae import VAE
+from modules.world_models.world_model import WorldModel_Sigma, WorldModel_Recurrent
+from utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
+
 torch.set_printoptions(edgeitems=10)
 
 
-class RandEncoderArchitecture:
+class VAEArchitecture:
     def __init__(self, x_dim, a_dim):
         # type: (tuple, tuple) -> None
         self.x_dim = x_dim
-        print('Observation space:', self.x_dim)
+        self.a_dim = a_dim
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.encoder = RandomEncoder_2D(x_dim=x_dim,
-                                        device=self.device,
-                                        z_dim=(40,))
-        self.decoder = Decoder_1D(z_dim=self.encoder.get_z_dim(),
-                                  x_dim=x_dim,
-                                  device=self.device)
-        self.loss_func_d = nn.BCELoss(reduction='none').to(self.device)
-        self.optimizer_d = torch.optim.Adam(self.decoder.parameters())
+        print('Observation space:', self.x_dim)
+        self.vae = VAE(x_dim, device=self.device)  # type: VAE
+        self.optimizer_vae = torch.optim.Adam(self.vae.parameters(), lr=0.001)
 
-        self.world_model = WorldModel(x_dim=self.encoder.get_z_dim(),
-                                      a_dim=a_dim,
-                                      vector_actions=False,
-                                      device=self.device)
+        self.world_model = WorldModel_Sigma(x_dim=self.vae.get_z_dim(),
+                                            a_dim=self.a_dim,
+                                            vector_actions=False,
+                                            device=self.device)
         self.loss_func_wm = nn.MSELoss(reduction='none').to(self.device)
         self.optimizer_wm = torch.optim.Adam(self.world_model.parameters())
 
         self.steps = 0
-        self.losses = {'world_model': [], 'decoder': []}
+        self.losses = {'world_model': [], 'vae': []}
 
     def train(self, x_t, x_tp1, a_t):
         x_t, x_tp1, a_t = x_t.to(self.device), x_tp1.to(self.device), a_t.to(self.device)
         assert x_t.shape == x_tp1.shape
         assert tuple(x_t.shape[1:]) == self.x_dim
 
-        z_t = self.encoder(x_t)
-        z_tp1 = self.encoder(x_tp1)
+        self.vae.zero_grad()
+        vae_loss, _, _, _, _ = self.vae(x_t)
+        vae_loss.backward()
+        self.optimizer_vae.step()
+        self.losses['vae'].append(vae_loss.item())
 
+        mu_t, log_sigma_t = self.vae.encode(x_t)
+        mu_tp1, log_sigma_tp1 = self.vae.encode(x_tp1)
         self.world_model.zero_grad()
-        z_tp1_prime = self.world_model(z_t, a_t)
-        loss_wm = torch.sum(self.loss_func_wm(z_tp1_prime, z_tp1))
-        self.losses['world_model'].append(loss_wm.item())
+        mu_tp1_prime, log_sigma_tp1_prime = self.world_model(mu_t.detach(), log_sigma_t.detach(), a_t)
+        loss_mu_wm = torch.sum(self.loss_func_wm(mu_tp1_prime, mu_tp1))
+        loss_log_sigma_wm = torch.sum(self.loss_func_wm(log_sigma_tp1_prime, log_sigma_tp1))
+        loss_wm = loss_mu_wm + loss_log_sigma_wm
         loss_wm.backward()
         self.optimizer_wm.step()
+        self.losses['world_model'].append(loss_wm.item())
+        # self.losses['world_model'].append(0.0)
 
-        self.decoder.zero_grad()
-        x_t_prime = self.decoder(z_t)
-        loss_d_t = torch.sum(self.loss_func_d(x_t_prime, x_t))
-        self.losses['decoder'].append(loss_d_t.item())
-        loss_d_t.backward()
-        self.optimizer_d.step()
         self.steps += 1
 
     def encode(self, x):
-        return self.encoder(x)
+        return self.vae.encode(x)
 
     def decode(self, z):
-        return self.decoder(z)
+        return self.vae.decode(z)
 
-    def forward_model(self, z):
-        return self.world_model(z)
+    def predict_next_z(self, mu, sigma):
+        with torch.no_grad():
+            z_tp1 = self.world_model(mu, sigma)
+        return z_tp1
 
     def predict_next_obs(self, x_t, a_t):
-        z_t = self.encoder(x_t)
-        z_tp1_prime = self.world_model(z_t, a_t)
-        return self.decoder(z_tp1_prime).detach()
+        with torch.no_grad():
+            mu_t, log_sigma_t = self.vae.encode(x_t)
+            mu_tp1, log_sigma_tp1 = self.world_model(mu_t, log_sigma_t, a_t)
+        x_tp1 = self.vae.decode(mu_tp1).detach()
+        return x_tp1
 
     def get_losses(self):
         return self.losses
+
 
 def main(env):
     # env = gym.make('ppaquette/SuperMarioBros-1-1-v0')
     # for i in gym.envs.registry.all():
     #     print(i)
     buffer = ReplayBuffer(5000)
-    obs_dim = env.observation_space.shape
+    obs_dim = INPUT_DIM
     a_dim = (env.action_space.n,)
-    x_dim = (obs_dim[2], obs_dim[0], obs_dim[1])
-    model = RandEncoderArchitecture(x_dim, a_dim)
+    model = VAEArchitecture(obs_dim, a_dim)
     for ep in range(100):
         s_t = env.reset()
-        s_t = np.transpose(s_t, (2, 0, 1)).astype(np.float) / 256  # Channel first and normalize input
+        s_t = channel_first_numpy(resize_to_standard_dim_numpy(s_t)) / 256  # Reshape and normalise input
         # env.render('human')
         done = False
         while not done:
             a_t = torch.randint(a_dim[0], (1,))
             s_tp1, r_t, done, _ = env.step(a_t)
-            s_tp1 = np.transpose(s_tp1, (2, 0, 1)).astype(np.float) / 256  # Channel first and normalize input
+            s_tp1 = channel_first_numpy(resize_to_standard_dim_numpy(s_tp1)) / 256  # Reshape and normalise input
             # env.render('human')
             buffer.add(s_t, a_t, r_t, s_tp1, done)
             s_t = s_tp1
@@ -104,8 +106,7 @@ def main(env):
                     torch.from_numpy(batch[3]).to(dtype=torch.float32),
                     torch.from_numpy(batch[1]).to(dtype=torch.float32))
         if i % 500 == 0:
-            print('Step:', i, 'WM loss:', model.get_losses()['world_model'][-1], '    VAE loss:',
-                  model.get_losses()['vae'][-1])
+            print('Step:', i, 'WM loss:', model.get_losses()['world_model'][-1], '    VAE loss:', model.get_losses()['vae'][-1])
     env.close()
 
     import matplotlib.pyplot as plt
@@ -119,7 +120,8 @@ def main(env):
         (ax1, ax2), (ax3, ax4) = axs
 
         ax1.imshow(s_t.permute(1, 2, 0).numpy())
-        s_t_prime = model.decode(model.encode(s_t))
+        mu_t, _ = model.encode(s_t)
+        s_t_prime = model.decode(mu_t)
         s_t_prime = s_t_prime.detach().cpu().squeeze(0).permute(1, 2, 0)
         ax2.imshow(s_t_prime.numpy())
 

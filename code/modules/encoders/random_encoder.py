@@ -92,8 +92,10 @@ class RandomEncoder_2D(BaseEncoder):
                                          padding=layer['padding']))
             self.layers.append(nn.ReLU())
             prev_channels = layer['channel_num']
-            prev_dim_x = (prev_dim_x + 2 * layer['padding'] - (layer['kernel_size'])) // layer['stride'] + 1
-            prev_dim_y = (prev_dim_y + 2 * layer['padding'] - (layer['kernel_size'])) // layer['stride'] + 1
+            prev_dim_x = (prev_dim_x + 2 * layer['padding'] - layer['kernel_size']) // layer['stride'] + 1
+            prev_dim_y = (prev_dim_y + 2 * layer['padding'] - layer['kernel_size']) // layer['stride'] + 1
+            if prev_dim_x == 0 or prev_dim_y == 0 or prev_channels == 0:
+                raise ValueError("Conv dimensions cannot be zero: " + str((prev_channels, prev_dim_x, prev_dim_y)))
         self.layers.append(self.Flatten())
         self.layers.append(nn.Linear(prev_dim_x * prev_dim_y * prev_channels, fc_dim))
         self.layers.append(nn.ReLU())
@@ -137,6 +139,8 @@ class RandomEncoder_2D_sigma(BaseEncoder):
             prev_channels = layer['channel_num']
             prev_dim_x = (prev_dim_x + 2 * layer['padding'] - (layer['kernel_size'] - 1)) // layer['stride'] + 1
             prev_dim_y = (prev_dim_y + 2 * layer['padding'] - (layer['kernel_size'] - 1)) // layer['stride'] + 1
+            if prev_dim_x == 0 or prev_dim_y == 0 or prev_channels == 0:
+                raise ValueError("Conv dimensions cannot be zero: " + str((prev_channels, prev_dim_x, prev_dim_y)))
         self.layers.append(self.Flatten())
         self.layers.append(nn.Linear(prev_dim_x * prev_dim_y * prev_channels, fc_dim))
         self.layers.append(nn.ReLU())
@@ -170,7 +174,7 @@ if __name__ == "__main__":
     import torchvision.datasets as datasets
     import torchvision.transforms as transforms
     import torchvision
-    from modules.decoders.decoder import Decoder
+    from modules.decoders.decoder import Decoder_1D
     import os
 
     def create_conv_layer_dict(params: tuple) -> dict:
@@ -190,7 +194,7 @@ if __name__ == "__main__":
     x_dim = tuple(ex.shape)
     conv_layers = (create_conv_layer_dict((32, 8, 4, 0)),)
     en = RandomEncoder_2D(x_dim=x_dim, conv_layers=conv_layers).to(device)
-    de = Decoder(z_dim=en.z_dim, x_dim=x_dim, device=device)
+    de = Decoder_1D(z_dim=en.z_dim, x_dim=x_dim, device=device)
     loss_func = nn.BCELoss(reduction='none').to(device)
     optimizer = torch.optim.Adam(de.parameters())
     for i, (batch, target) in enumerate(train_data):
