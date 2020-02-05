@@ -12,7 +12,7 @@ class VAE(nn.Module):
         self.x_dim = x_dim
         self.z_dim = z_dim
         self.encoder = Encoder_2D(x_dim=x_dim, conv_layers=conv_layers, z_dim=z_dim, device=device)  # type: Encoder_2D
-        self.decoder = Decoder_1D(z_dim=z_dim, x_dim=x_dim, device=device)
+        self.decoder = Decoder_2D(z_dim=z_dim, x_dim=x_dim, device=device)
         self.loss = nn.BCELoss(reduction='none')
 
     def forward(self, x):

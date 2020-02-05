@@ -92,7 +92,9 @@ class Decoder_2D(BaseDecoder):
         self.conv_layers.reverse()
         self.upconv_dims.reverse()
         conv_input_size = self.upconv_dims[0][0] * self.upconv_dims[0][1] * self.upconv_dims[0][2]
-        self.layers.append(nn.Linear(self.z_dim[0], conv_input_size))
+        self.layers.append(nn.Linear(self.z_dim[0], fc_dim))
+        self.layers.append(nn.ReLU())
+        self.layers.append(nn.Linear(fc_dim, conv_input_size))
         self.layers.append(self.View2D(self.upconv_dims[0]))
         for prev_layer_dims, layer in zip(self.upconv_dims[1:], self.conv_layers):
             next_channels, next_dim_x, next_dim_y = prev_layer_dims[0], prev_layer_dims[1], prev_layer_dims[2]

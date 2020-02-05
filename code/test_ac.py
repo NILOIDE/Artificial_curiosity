@@ -23,7 +23,7 @@ class RandEncoderArchitecture:
         self.decoder = Decoder_2D(z_dim=self.encoder.get_z_dim(),
                                   x_dim=x_dim,
                                   device=self.device)
-        self.loss_func_d = nn.BCELoss().to(self.device)
+        self.loss_func_d = nn.BCELoss(reduction='none').to(self.device)
         self.optimizer_d = torch.optim.Adam(self.decoder.parameters())
 
         self.world_model = WorldModel(x_dim=self.encoder.get_z_dim(),
@@ -46,14 +46,14 @@ class RandEncoderArchitecture:
 
         self.world_model.zero_grad()
         z_tp1_prime = self.world_model(z_t, a_t)
-        loss_wm = self.loss_func_wm(z_tp1_prime, z_tp1)
+        loss_wm = torch.sum(self.loss_func_wm(z_tp1_prime, z_tp1))
         self.losses['world_model'].append(loss_wm.item())
         loss_wm.backward()
         self.optimizer_wm.step()
 
         self.decoder.zero_grad()
         x_t_prime = self.decoder(z_t)
-        loss_d_t =self.loss_func_d(x_t_prime, x_t)
+        loss_d_t = torch.sum(self.loss_func_d(x_t_prime, x_t))
         self.losses['decoder'].append(loss_d_t.item())
         loss_d_t.backward()
         self.optimizer_d.step()
@@ -132,7 +132,7 @@ def main(env):
 
 
 if __name__ == "__main__":
-    environment = gym.make('Riverraid-v0')
+    environment = gym.make('Mountain-v0')
     try:
         main(environment)
     finally:
