@@ -110,7 +110,50 @@ class WorldModel(BaseWorldModel):
         return x_tp1
 
 
-class WorldModel_Sigma(BaseWorldModel):
+class WorldModel_SigmaOutputOnly(BaseWorldModel):
+
+    def __init__(self, x_dim, a_dim, vector_actions=False, hidden_dim=(256, 256), device='cpu'):
+        # type: (tuple, tuple, bool, tuple, str) -> None
+        """"
+        A world model predicts the state at t+1, given state at t using a feed-forward model.
+        This class predicts a distribution over latent space variables. Distributions are assumed Gaussian.
+        """
+        super().__init__(x_dim, a_dim, vector_actions, device)
+        self.layers = []
+        self.input_dim = (x_dim[0] + a_dim[0],)
+        h_dim_prev = self.input_dim[0]
+        for h_dim in hidden_dim:
+            self.layers.append(nn.Linear(h_dim_prev, h_dim))
+            self.layers.append(nn.ReLU())
+            h_dim_prev = h_dim
+        self.shared_layers = nn.Sequential(*self.layers).to(self.device)
+        self.mu_head = nn.Sequential(nn.Linear(h_dim_prev, x_dim[0])).to(self.device)
+        # St.dev. can't be negative, thus ReLU
+        self.sigma_head = nn.Sequential(nn.Linear(h_dim_prev, x_dim[0]), nn.ReLU()).to(self.device)
+
+    def forward(self, z_t, a_t):
+        # type: (torch.Tensor, torch.Tensor) -> [torch.Tensor, torch.Tensor]
+        """
+        Perform forward pass of world model. Means and variances are returned
+        Make sure that any constraints are enforced.
+        """
+        mu_t = self.apply_state_constraints(z_t)                     # Make sure dimensions are correct
+        a_t = self.apply_action_constraints(a_t)                     # Make sure dimensions are correct
+        assert mu_t.shape[0] == a_t.shape[0]                         # Same batch size
+
+        xa_t = torch.cat((mu_t, a_t), dim=1)
+        assert xa_t.shape[0] == mu_t.shape[0]                        # Same batch size
+        assert xa_t.shape[1] == self.input_dim[0]                    # Dimensions of model input
+        out = self.shared_layers(xa_t)
+        mu_tp1 = self.mu_head(out)
+        log_sigma_tp1 = self.sigma_head(out)
+
+        mu_tp1 = self.apply_state_constraints(mu_tp1)                # Make sure dimensions are correct
+        log_sigma_tp1 = self.apply_state_constraints(log_sigma_tp1)  # Make sure dimensions are correct
+        return mu_tp1, log_sigma_tp1
+
+
+class WorldModel_SigmaInputOutput(BaseWorldModel):
 
     def __init__(self, x_dim, a_dim, vector_actions=False, hidden_dim=(256, 256), device='cpu'):
         # type: (tuple, tuple, bool, tuple, str) -> None

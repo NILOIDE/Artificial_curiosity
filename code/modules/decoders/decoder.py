@@ -96,6 +96,7 @@ class Decoder_2D(BaseDecoder):
         self.layers.append(nn.ReLU())
         self.layers.append(nn.Linear(fc_dim, conv_input_size))
         self.layers.append(self.View2D(self.upconv_dims[0]))
+        self.layers.append(nn.BatchNorm2d(self.upconv_dims[0][0]))
         for prev_layer_dims, layer in zip(self.upconv_dims[1:], self.conv_layers):
             next_channels, next_dim_x, next_dim_y = prev_layer_dims[0], prev_layer_dims[1], prev_layer_dims[2]
             self.layers.append(nn.ReLU())
@@ -104,6 +105,7 @@ class Decoder_2D(BaseDecoder):
                                                   kernel_size=layer['kernel_size'],
                                                   stride=layer['stride'],
                                                   padding=layer['padding']))
+            self.layers.append(nn.BatchNorm2d(next_channels))
         self.layers.append(nn.Sigmoid())
         self.model = nn.Sequential(*self.layers).to(self.device)
 

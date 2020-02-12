@@ -6,6 +6,24 @@ import torch
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
     parser.add_argument(
+        '--algo', default='ppo', help='algorithm to use: a2c | ppo | acktr')
+    parser.add_argument(
+        '--gail',
+        action='store_true',
+        default=False,
+        help='do imitation learning with gail')
+    parser.add_argument(
+        '--gail-experts-dir',
+        default='./gail_experts',
+        help='directory that contains expert demonstrations for gail')
+    parser.add_argument(
+        '--gail-batch-size',
+        type=int,
+        default=128,
+        help='gail batch size (default: 128)')
+    parser.add_argument(
+        '--gail-epoch', type=int, default=5, help='gail epochs (default: 5)')
+    parser.add_argument(
         '--lr', type=float, default=7e-4, help='learning rate (default: 7e-4)')
     parser.add_argument(
         '--eps',
@@ -57,12 +75,12 @@ def get_args():
     parser.add_argument(
         '--num-processes',
         type=int,
-        default=16,
+        default=4,
         help='how many training CPU processes to use (default: 16)')
     parser.add_argument(
         '--num-steps',
         type=int,
-        default=5,
+        default=32,
         help='number of forward steps in A2C (default: 5)')
     parser.add_argument(
         '--ppo-epoch',
@@ -97,11 +115,11 @@ def get_args():
     parser.add_argument(
         '--num-env-steps',
         type=int,
-        default=1e4,
+        default=10e6,
         help='number of environment steps to train (default: 10e6)')
     parser.add_argument(
         '--env-name',
-        default='CartPole-v0',
+        default='SeaquestNoFrameskip-v4',
         help='environment to train on (default: PongNoFrameskip-v4)')
     parser.add_argument(
         '--log-dir',
@@ -134,5 +152,10 @@ def get_args():
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+    assert args.algo in ['a2c', 'ppo', 'acktr']
+    if args.recurrent_policy:
+        assert args.algo in ['a2c', 'ppo'], \
+            'Recurrent policy is not implemented for ACKTR'
 
     return args

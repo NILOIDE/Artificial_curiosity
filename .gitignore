@@ -5,6 +5,8 @@ __pycache__/
 
 # My stuff
 code/data/
+code/saved_objects/
+code/trained_models/
 
 # C extensions
 *.so

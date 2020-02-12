@@ -28,10 +28,10 @@ class Model(nn.Module):
                                   device=self.device)  # type: Encoder_2D
         self.target_encoder = copy.deepcopy(self.encoder)
         self.target_steps = target_steps
-        self.world_model = WorldModel_SigmaInputOutput(x_dim=self.encoder.get_z_dim(),
+        self.world_model = WorldModel_SigmaOutputOnly(x_dim=self.encoder.get_z_dim(),
                                                       a_dim=self.a_dim,
                                                       vector_actions=False,
-                                                      device=self.device)  # type: WorldModel_SigmaInputOutput
+                                                      device=self.device)  # type: WorldModel_SigmaOutputOnly
 
         # self.loss_func = torch.nn.SmoothL1Loss().to(self.device)
         self.loss_func = torch.distributions.kl.kl_divergence
@@ -39,7 +39,9 @@ class Model(nn.Module):
 
     def forward(self, x_t, x_tp1, a_t):
         mu_t, log_sigma_t = self.encoder(x_t)
-        mu_tp1_prime, log_sigma_tp1_prime = self.world_model(mu_t, log_sigma_t, a_t)
+        noise = torch.normal(torch.zeros_like(mu_t), torch.ones_like(mu_t))  ##
+        z_t = mu_t + log_sigma_t.exp() * noise  ##
+        mu_tp1_prime, log_sigma_tp1_prime = self.world_model(z_t, a_t)
         mu_tp1, log_sigma_tp1 = self.target_encode(x_tp1)
         mu_tp1, log_sigma_tp1 = mu_tp1.detach(), log_sigma_tp1.detach()
         distribution_tp1 = torch.distributions.MultivariateNormal(mu_tp1_prime,
@@ -47,7 +49,8 @@ class Model(nn.Module):
         distribution_target = torch.distributions.MultivariateNormal(mu_tp1,
                                                                      torch.diag_embed((log_sigma_tp1.exp() + 1e-8)))
         loss_reg = 0.5 * torch.sum(log_sigma_t.exp() + mu_t ** 2 - log_sigma_t - 1, dim=1)
-        loss = (self.loss_func(distribution_target, distribution_tp1) + 0.001 * loss_reg).mean()
+        loss_recon = self.loss_func(distribution_target, distribution_tp1)
+        loss = torch.mean(loss_recon + 0.001 * loss_reg)
         # loss = self.loss_func(distribution_target, distribution_tp1).mean()
         if torch.isnan(loss).sum() != 0:
             print(log_sigma_tp1.min(), log_sigma_tp1.max(), log_sigma_tp1_prime.min(), log_sigma_tp1_prime.max())
@@ -75,15 +78,15 @@ class Model(nn.Module):
         with torch.no_grad():
             return self.target_encoder(x)
 
-    def next_z(self, mu_t, log_sigma_t, a_t):
+    def next_z(self, z_t, a_t):
         with torch.no_grad():
-            mu_tp1, log_sigma_tp1 = self.world_model(mu_t, log_sigma_t, a_t)
+            mu_tp1, log_sigma_tp1 = self.world_model(z_t, a_t)
         return mu_tp1, log_sigma_tp1
 
     def next_z_from_x(self, x_t, a_t):
         with torch.no_grad():
             mu_t, log_sigma_t = self.encode(x_t)
-            mu_tp1, log_sigma_tp1 = self.world_model(mu_t, log_sigma_t, a_t)
+            mu_tp1, log_sigma_tp1 = self.world_model(mu_t, a_t)
         return mu_tp1, log_sigma_tp1
 
 
@@ -138,8 +141,8 @@ class Architecture:
         with torch.no_grad():
             return self.decoder(z).detach()
 
-    def next_z(self, mu_t, log_sigma_t, a_t):
-        mu_tp1, log_sigma_tp1 = self.model.next_z(mu_t, log_sigma_t, a_t)
+    def next_z(self, mu_t, a_t):
+        mu_tp1, log_sigma_tp1 = self.model.next_z(mu_t, a_t)
         return mu_tp1.detach(), log_sigma_tp1.detach()
 
     def next_z_from_x(self, x_t, a_t):
@@ -174,39 +177,39 @@ def main(env):
     obs_dim = INPUT_DIM
     a_dim = (env.action_space.n,)
     model = Architecture(obs_dim, a_dim)
-    # for ep in range(200):
-    #     s_t = env.reset()
-    #     s_t = channel_first_numpy(resize_to_standard_dim_numpy(s_t)) / 256  # Reshape and normalise input
-    #     done = False
-    #     while not done:
-    #         a_t = torch.randint(a_dim[0], (1,))
-    #         for i in range(3):
-    #             _ = env.step(a_t)
-    #         s_tp1, r_t, done, _ = env.step(a_t)
-    #         s_tp1 = channel_first_numpy(resize_to_standard_dim_numpy(s_tp1)) / 256  # Reshape and normalise input
-    #         buffer.add(s_t, a_t, r_t, s_tp1, done)
-    #         s_t = s_tp1
-    #         if done:
-    #             break
-    # with open(r"saved_objects/buffer.pkl", "wb") as file:
-    #     pickle.dump(buffer, file)
-    with open(r"saved_objects/buffer.pkl", "rb") as file:
-        buffer = pickle.load(file)
+    for ep in range(100):
+        s_t = env.reset()
+        s_t = channel_first_numpy(resize_to_standard_dim_numpy(s_t)) / 256  # Reshape and normalise input
+        done = False
+        while not done:
+            a_t = torch.randint(a_dim[0], (1,))
+            for i in range(3):
+                _ = env.step(a_t)
+            s_tp1, r_t, done, _ = env.step(a_t)
+            s_tp1 = channel_first_numpy(resize_to_standard_dim_numpy(s_tp1)) / 256  # Reshape and normalise input
+            buffer.add(s_t, a_t, r_t, s_tp1, done)
+            s_t = s_tp1
+            if done:
+                break
+    with open(r"saved_objects/buffer_Freeway.pkl", "wb") as file:
+        pickle.dump(buffer, file)
+    # with open(r"saved_objects/buffer.pkl", "rb") as file:
+    #     buffer = pickle.load(file)
     print('Buffer size:', len(buffer))
-    # model.load_wm(path='../saved_objects/wm_encoder_reg.pt')
+    # model.load_wm(path='../saved_objects/wm_encoder_sampled.pt')
     for i in range(max_steps - model.model.steps):
         batch = buffer.sample(64)
         model.train_wm(torch.from_numpy(batch[0]).to(dtype=torch.float32),
                        torch.from_numpy(batch[3]).to(dtype=torch.float32),
                        torch.from_numpy(batch[1]).to(dtype=torch.float32))
         if i % 100 == 0:
-            print('Step:', i, 'WM loss:', model.get_losses()['world_model'][-1])
-            model.save_wm(path='saved_objects/wm_encoder_reg.pt')
-    for i in range(max_steps * 2):
+            print('Step:', i, '/', max_steps, ' WM loss:', model.get_losses()['world_model'][-1])
+            model.save_wm(path='saved_objects/wm_encoder_sampled.pt')
+    for i in range(max_steps):
         batch = buffer.sample(64)
         model.train_d(torch.from_numpy(batch[0]).to(dtype=torch.float32))
         if i % 100 == 0:
-            print('Step:', i, 'D loss:', model.get_losses()['decoder'][-1])
+            print('Step:', i, '/', max_steps, 'D loss:', model.get_losses()['decoder'][-1])
     env.close()
 
     import matplotlib.pyplot as plt
@@ -226,28 +229,26 @@ def main(env):
         ax2.imshow(s_t_prime.numpy())
         ax3.imshow(s_tp1.permute(1, 2, 0).numpy())
 
-        # s_tp1_prime = model.predict_next_obs(s_t, a_t)
         mu_t, log_sigma_t = model.encode(s_t)
-        mu_tp1, log_sigma_tp1 = model.next_z(mu_t, log_sigma_t, a_t)
+        mu_tp1, log_sigma_tp1 = model.next_z(mu_t, a_t)
         s_tp1_prime = model.decode(mu_tp1)
         s_tp1_prime = s_tp1_prime.cpu().squeeze(0).permute(1, 2, 0)
         ax4.imshow(s_tp1_prime.numpy())
 
-        mu_t2, log_sigma_t2 = model.next_z(mu_tp1, log_sigma_tp1, a_t)
+        mu_t2, log_sigma_t2 = model.next_z(mu_tp1, a_t)
         s_tp2_prime = model.decode(mu_t2)
         s_tp2_prime = s_tp2_prime.cpu().squeeze(0).permute(1, 2, 0)
         ax5.imshow(s_tp2_prime.numpy())
 
-        mu_t3, log_sigma_t3 = model.next_z(mu_t2, log_sigma_t2, a_t)
+        mu_t3, log_sigma_t3 = model.next_z(mu_t2, a_t)
         s_tp3_prime = model.decode(mu_t3)
         s_tp3_prime = s_tp3_prime.cpu().squeeze(0).permute(1, 2, 0)
         ax6.imshow(s_tp3_prime.numpy())
-        fig.suptitle('Train steps:' + str(max_steps) + ', no sample')
-
+        fig.suptitle('Train steps:' + str(max_steps) + ', sampled')
 
 
 if __name__ == "__main__":
-    environment = gym.make('Riverraid-v0')
+    environment = gym.make('Freeway-v0')
     try:
         main(environment)
     finally:

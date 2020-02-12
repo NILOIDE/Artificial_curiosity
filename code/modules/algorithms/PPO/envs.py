@@ -87,7 +87,7 @@ def make_vec_envs(env_name,
     ]
 
     if len(envs) > 1:
-        envs = ShmemVecEnv(envs, context='fork')
+        envs = ShmemVecEnv(envs)#, context='fork')
     else:
         envs = DummyVecEnv(envs)
 

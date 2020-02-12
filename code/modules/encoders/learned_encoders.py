@@ -5,8 +5,8 @@ from modules.encoders.base_encoder import BaseEncoder
 
 class Encoder_2D(BaseEncoder):
 
-    def __init__(self, x_dim=(3, 84, 84), conv_layers=None, fc_dim=512, z_dim=(20,), device='cpu'):
-        # type: (tuple, tuple, int, tuple, str) -> None
+    def __init__(self, x_dim=(3, 84, 84), conv_layers=None, fc_dim=512, z_dim=(20,), batch_norm=True, device='cpu'):
+        # type: (tuple, tuple, int, tuple, bool, str) -> None
         """"
         This enconder has static weights as no gradients will be calculated. It provides static features.
         Any number of arbitrary convolutional layers can used. A layer is represented using a dictionary.
@@ -24,12 +24,16 @@ class Encoder_2D(BaseEncoder):
                                          kernel_size=layer['kernel_size'],
                                          stride=layer['stride'],
                                          padding=layer['padding']))
+            if batch_norm:
+                self.layers.append(nn.BatchNorm2d(layer['channel_num']))
             self.layers.append(nn.ReLU())
             prev_channels = layer['channel_num']
             prev_dim_x = (prev_dim_x + 2 * layer['padding'] - layer['kernel_size']) // layer['stride'] + 1
             prev_dim_y = (prev_dim_y + 2 * layer['padding'] - layer['kernel_size']) // layer['stride'] + 1
         self.layers.append(self.Flatten())
         self.layers.append(nn.Linear(prev_dim_x * prev_dim_y * prev_channels, fc_dim))
+        # if batch_norm:
+        #     self.layers.append(nn.BatchNorm1d(fc_dim))  # Causes issues if batch size is 1
         self.layers.append(nn.ReLU())
         self.model = nn.Sequential(*self.layers).to(self.device)
         self.mu_head = nn.Sequential(nn.Linear(fc_dim, *self.z_dim)).to(self.device)
