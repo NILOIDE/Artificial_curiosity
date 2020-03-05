@@ -11,6 +11,7 @@ from baselines.common.vec_env import VecEnvWrapper
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common.vec_env.shmem_vec_env import ShmemVecEnv
 from baselines.common.vec_env.vec_normalize import VecNormalize as VecNormalize_
+from baselines.bench.monitor import Monitor
 
 try:
     import dm_control2gym
@@ -170,9 +171,9 @@ class VecPyTorch(VecEnvWrapper):
         return obs
 
     def step_async(self, actions):
-        if isinstance(actions, torch.LongTensor):
-            # Squeeze the dimension for discrete actions
-            actions = actions.squeeze(1)
+        # if isinstance(actions, torch.LongTensor):
+        #     # Squeeze the dimension for discrete actions
+        #     actions = actions.squeeze(1)
         actions = actions.cpu().numpy()
         self.venv.step_async(actions)
 

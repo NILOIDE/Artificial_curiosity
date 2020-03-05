@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 import gym
 from modules.replay_buffers.replay_buffer import ReplayBuffer
-from modules.world_models.world_model import WorldModel_SigmaInputOutput, WorldModel_SigmaOutputOnly
-from utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
-from modules.encoders.learned_encoders import Encoder_2D
-from modules.decoders.decoder import Decoder_1D, Decoder_2D
+from modules.world_models.forward_model import ForwardModel_SigmaOutputOnly
+from utils.utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
+from modules.encoders.learned_encoders import Encoder_2D_Sigma
+from modules.decoders.decoder import Decoder_2D
 
 import copy
 import pickle
@@ -23,15 +23,15 @@ class Model(nn.Module):
         self.z_dim = z_dim
         self.tau = tau
         self.device = device
-        self.encoder = Encoder_2D(x_dim=self.x_dim,
-                                  z_dim=self.z_dim,
-                                  device=self.device)  # type: Encoder_2D
+        self.encoder = Encoder_2D_Sigma(x_dim=self.x_dim,
+                                        z_dim=self.z_dim,
+                                        device=self.device)  # type: Encoder_2D_Sigma
         self.target_encoder = copy.deepcopy(self.encoder)
         self.target_steps = target_steps
-        self.world_model = WorldModel_SigmaOutputOnly(x_dim=self.encoder.get_z_dim(),
-                                                      a_dim=self.a_dim,
-                                                      vector_actions=False,
-                                                      device=self.device)  # type: WorldModel_SigmaOutputOnly
+        self.world_model = ForwardModel_SigmaOutputOnly(x_dim=self.encoder.get_z_dim(),
+                                                        a_dim=self.a_dim,
+                                                        vector_actions=False,
+                                                        device=self.device)  # type: ForwardModel_SigmaOutputOnly
 
         # self.loss_func = torch.nn.SmoothL1Loss().to(self.device)
         self.loss_func = torch.distributions.kl.kl_divergence

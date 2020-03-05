@@ -2,6 +2,10 @@ import torch
 import torchvision.transforms as transforms
 import cv2
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import os
 
 INPUT_X = 84
 INPUT_Y = 84
@@ -10,7 +14,7 @@ INPUT_DIM = (INPUT_C, INPUT_X, INPUT_Y)
 INPUT_INTERPOLATION = cv2.INTER_NEAREST
 
 
-def resize_torch(im: torch.Tensor,  dims:tuple) -> torch.Tensor:
+def resize_torch(im: torch.Tensor,  dims: tuple) -> torch.Tensor:
     p = transforms.Compose([transforms.Scale(dims)])
     return p(im)
 
@@ -50,9 +54,9 @@ def rgb_to_gray(rgb, channels_first=True):
 def channel_first_numpy(im: np.ndarray) -> np.ndarray:
     assert type(im) == np.ndarray
     assert len(tuple(im.shape)) == 3
-    assert im.shape[0] == INPUT_C or im.shape[2] == INPUT_C
     if im.shape[0] == INPUT_C:
         raise ValueError("Image already in channel first form")
+    assert im.shape[2] == INPUT_C
     return np.transpose(im, (2, 0, 1))
 
 
@@ -78,6 +82,15 @@ def standardize_state(s_t, grayscale=False):
     return s_t
 
 
+def transition_to_torch_no_r(s_t, a_t, s_tp1, d_t):
+    # type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> tuple
+    s_t = torch.from_numpy(s_t).to(dtype=torch.float32)
+    a_t = torch.from_numpy(a_t).to(dtype=torch.long)
+    s_tp1 = torch.from_numpy(s_tp1).to(dtype=torch.float32)
+    d_t = torch.from_numpy(d_t).to(dtype=torch.int8)
+    return s_t, a_t, s_tp1, d_t
+
+
 def transition_to_torch(s_t, a_t, r_t, s_tp1, d_t):
     # type: (np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray) -> tuple
     s_t = torch.from_numpy(s_t).to(dtype=torch.float32)
@@ -86,4 +99,47 @@ def transition_to_torch(s_t, a_t, r_t, s_tp1, d_t):
     s_tp1 = torch.from_numpy(s_tp1).to(dtype=torch.float32)
     d_t = torch.from_numpy(d_t).to(dtype=torch.int8)
     return s_t, a_t, r_t, s_tp1, d_t
+
+
+def items_to_torch(items):
+    # type: (tuple) -> tuple
+    """"
+    Takes any amount of columns to be transitioned to torch.
+    By default it makes them into float32, thus one must be careful if actions are to be used as indices later.
+    """
+    out = []
+    for i in items:
+        out.append(torch.from_numpy(i).to(dtype=torch.float32))
+    return tuple(out)
+
+
+def plot_list_in_dict(lists, x_min=0, x_interval=1, y_low=None, y_high=None,
+                      show=False, path=None, legend_loc=None,
+                      title=None, x_label=None, y_label=None):
+    # type: (dict, int, int, float, float, bool, str, str, str, str, str) -> None
+    fig = plt.figure()
+    for i in lists:
+        name, li = i, lists[i]
+        x = np.arange(x_min, x_min + len(li) * x_interval, x_interval)
+        plt.plot(x, li, label=name)
+    plt.legend(loc=legend_loc)
+    plt.ylim(y_low, y_high)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    if path is not None:
+        directory = '../plots/'
+        for i, c in enumerate(reversed(path)):
+            if c == '/':
+                directory = path[:-i]
+                break
+        try:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            plt.savefig(path, format='png')
+        except:
+            print('Plot saving failed. Path:', path)
+    if show:
+        plt.show()
+    plt.close(fig)
 

@@ -2,12 +2,11 @@
 import torch
 import torch.nn as nn
 import gym
-import numpy as np
 from modules.replay_buffers.replay_buffer import ReplayBuffer
 from modules.encoders.random_encoder import RandomEncoder_2D
-from modules.world_models.world_model import WorldModel, WorldModel_Recurrent
-from utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
-from modules.decoders.decoder import Decoder_1D, Decoder_2D
+from modules.world_models.forward_model import ForwardModel
+from utils.utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
+from modules.decoders.decoder import Decoder_2D
 torch.set_printoptions(edgeitems=10)
 
 
@@ -26,10 +25,10 @@ class RandEncoderArchitecture:
         self.loss_func_d = nn.BCELoss(reduction='none').to(self.device)
         self.optimizer_d = torch.optim.Adam(self.decoder.parameters())
 
-        self.world_model = WorldModel(x_dim=self.encoder.get_z_dim(),
-                                      a_dim=a_dim,
-                                      vector_actions=False,
-                                      device=self.device)
+        self.world_model = ForwardModel(x_dim=self.encoder.get_z_dim(),
+                                        a_dim=a_dim,
+                                        vector_actions=False,
+                                        device=self.device)
         self.loss_func_wm = torch.nn.SmoothL1Loss().to(self.device)
         self.optimizer_wm = torch.optim.Adam(self.world_model.parameters())
 

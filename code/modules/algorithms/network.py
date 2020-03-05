@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class Network1D(nn.Module):
 
-    def __init__(self, x_dim, y_dim, hidden_dim=(128,), device='cpu'):
+    def __init__(self, x_dim, y_dim, hidden_dim=(256,), device='cpu'):
         # type: (tuple, tuple, tuple, str) -> None
         super().__init__()
         self.x_dim = x_dim
@@ -25,14 +25,14 @@ class Network1D(nn.Module):
         return self.model(s_t)
 
     def apply_tensor_constraints(self, x: torch.Tensor) -> torch.Tensor:
-        assert type(x) == torch.Tensor
-        if len(tuple(x.shape)) != 1 and len(tuple(x.shape)) != 2:
-            raise ValueError("Encoder input tensor should be 1D (single example) or 2D (batch).")
+        # assert type(x) == torch.Tensor
+        # if len(tuple(x.shape)) != 1 and len(tuple(x.shape)) != 2:
+        #     raise ValueError("Encoder input tensor should be 1D (single example) or 2D (batch). Received "+str(x.shape))
         if len(tuple(x.shape)) == 1:  # Add batch dimension to 1D tensor
             x = x.unsqueeze(0)
-        if self.cuda and not x.is_cuda:
-            x = x.to(self.device)
-        assert tuple(x.shape[1:]) == self.x_dim
+        # if self.cuda and not x.is_cuda:
+        x = x.to(self.device)
+        # assert tuple(x.shape[1:]) == self.x_dim
         return x
 
     def get_z_dim(self) -> tuple:
@@ -80,7 +80,7 @@ class Network2D(nn.Module):
         self.model = nn.Sequential(*self.layers).to(device)
 
     def forward(self, s_t: torch.Tensor) -> torch.Tensor:
-        s_t = self.apply_tensor_constraints(s_t)
+        # s_t = self.apply_tensor_constraints(s_t)
         return self.model(s_t)
 
     def apply_tensor_constraints(self, x: torch.Tensor) -> torch.Tensor:

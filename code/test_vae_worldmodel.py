@@ -1,12 +1,10 @@
 # Atari-py working by following: https://stackoverflow.com/questions/42605769/openai-gym-atari-on-windows/46739299
 import torch
-import torch.nn as nn
 import gym
-import numpy as np
 from modules.replay_buffers.replay_buffer import ReplayBuffer
-from modules.vae import VAE
-from modules.world_models.world_model import WorldModel_Sigma, WorldModel_Recurrent
-from utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
+from modules.encoders.vae import VAE
+from modules.world_models.forward_model import WorldModel_Sigma
+from utils.utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
 import copy
 
 torch.set_printoptions(edgeitems=10)

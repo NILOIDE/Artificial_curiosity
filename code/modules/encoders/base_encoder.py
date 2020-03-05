@@ -20,20 +20,21 @@ class BaseEncoder(nn.Module):
         super().__init__()
         self.x_dim = x_dim
         self.z_dim = z_dim
-        print('Encoder has dimensions:', x_dim, '->', z_dim)
         if device in {'cuda', 'cpu'}:
             self.device = device
             self.cuda = True if device == 'cuda' else False
+        print('Encoder has dimensions:', x_dim, '->', z_dim, 'Device:', self.device)
 
     def apply_tensor_constraints(self, x: torch.Tensor) -> torch.Tensor:
         assert type(x) == torch.Tensor
-        if len(tuple(x.shape)) != 3 and len(tuple(x.shape)) != 4:
-            raise ValueError("Encoder input tensor should be 3D (single image) or 4D (batch).")
+        l = len(self.x_dim)
+        if len(tuple(x.shape)) != l and len(tuple(x.shape)) != l+1:
+            raise ValueError("Encoder input tensor should be "+str(l)+"D (single example) or "+str(l+1)+"D (batch).")
         if len(tuple(x.shape)) == 3:  # Add batch dimension to 1D tensor
             x = x.unsqueeze(0)
         if self.cuda and not x.is_cuda:
             x = x.to(self.device)
-        assert tuple(x.shape[-3:]) == self.x_dim
+        assert tuple(x.shape[-l:]) == self.x_dim
         return x
 
     def get_z_dim(self) -> tuple:

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from modules.encoders.learned_encoders import Encoder_2D
+from modules.encoders.learned_encoders import Encoder_2D_Sigma
 from modules.decoders.decoder import Decoder_1D, Decoder_2D
 
 
@@ -11,7 +11,7 @@ class VAE(nn.Module):
         super().__init__()
         self.x_dim = x_dim
         self.z_dim = z_dim
-        self.encoder = Encoder_2D(x_dim=x_dim, conv_layers=conv_layers, z_dim=z_dim, device=device)  # type: Encoder_2D
+        self.encoder = Encoder_2D_Sigma(x_dim=x_dim, conv_layers=conv_layers, z_dim=z_dim, device=device)  # type: Encoder_2D_Sigma
         self.decoder = Decoder_2D(z_dim=z_dim, x_dim=x_dim, device=device)
         self.loss = nn.BCELoss(reduction='none')
 
