@@ -27,14 +27,14 @@ class BaseEncoder(nn.Module):
 
     def apply_tensor_constraints(self, x: torch.Tensor) -> torch.Tensor:
         assert type(x) == torch.Tensor
-        l = len(self.x_dim)
-        if len(tuple(x.shape)) != l and len(tuple(x.shape)) != l+1:
-            raise ValueError("Encoder input tensor should be "+str(l)+"D (single example) or "+str(l+1)+"D (batch).")
+        le = len(self.x_dim)
+        if len(tuple(x.shape)) != le and len(tuple(x.shape)) != le+1:
+            raise ValueError("Encoder input tensor should be "+str(le)+"D (single example) or "+str(le+1)+"D (batch).")
         if len(tuple(x.shape)) == 3:  # Add batch dimension to 1D tensor
             x = x.unsqueeze(0)
         if self.cuda and not x.is_cuda:
             x = x.to(self.device)
-        assert tuple(x.shape[-l:]) == self.x_dim
+        assert tuple(x.shape[-le:]) == self.x_dim
         return x
 
     def get_z_dim(self) -> tuple:

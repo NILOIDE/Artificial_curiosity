@@ -44,7 +44,7 @@ class BaseForwardModel(nn.Module):
         Apply constraints to state input tensors.
         """
         x = self.apply_tensor_constraints(x, self.x_dim, x_name)
-        assert x.shape[-1] == self.x_dim[0]
+        assert x.shape[-1] == self.x_dim[0], f'Expected {self.x_dim[0]}, received {x.shape[-1]}'
         return x
 
     def apply_action_constraints(self, a, name='action'):
@@ -79,7 +79,7 @@ class BaseForwardModel(nn.Module):
 
 class ForwardModel(BaseForwardModel):
 
-    def __init__(self, x_dim, a_dim, hidden_dim=(64, 64), device='cpu'):
+    def __init__(self, x_dim, a_dim, hidden_dim=(256,), device='cpu'):
         # type: (tuple, tuple, tuple, str) -> None
         """"
         A world model predicts the state at t+1, given state at t using a feed-forward model.

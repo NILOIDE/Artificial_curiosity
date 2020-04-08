@@ -4,8 +4,8 @@ from modules.encoders.base_encoder import BaseEncoder
 
 
 class RandomEncoder_1D(BaseEncoder):
-    def __init__(self, x_dim, hidden_dim=(256,), z_dim=(20,), device='cpu'):
-        # type: (tuple, tuple, tuple, str) -> None
+    def __init__(self, x_dim, hidden_dim=(64,), z_dim=(20,), batch_norm=False, device='cpu'):
+        # type: (tuple, tuple, tuple, bool, str) -> None
         """"
         This enconder has static weights as no gradients will be calculated. It provides static features.
         The latent representation is assumed to be Gaussian.
@@ -15,15 +15,17 @@ class RandomEncoder_1D(BaseEncoder):
         h_dim_prev = x_dim[0]
         for h_dim in hidden_dim:
             self.layers.append(nn.Linear(h_dim_prev, h_dim))
+            if batch_norm:
+                self.layers.append(nn.BatchNorm1d(h_dim))
             self.layers.append(nn.ReLU())
             h_dim_prev = h_dim
         self.layers.append(nn.Linear(h_dim_prev, z_dim[0]))
         self.model = nn.Sequential(*self.layers).to(self.device)
-        for param in self.network.parameters():
+        for param in self.model.parameters():
             param.requires_grad = False
 
     def forward(self, x):
-        # type: (torch.Tensor) -> [torch.Tensor, torch.Tensor]
+        # type: (torch.Tensor) -> torch.Tensor
         """
         Perform forward pass of encoder. Returns mean and std with shape [batch_size, z_dim].
         Make sure that any constraints are enforced.

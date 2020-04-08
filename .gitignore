@@ -7,6 +7,9 @@ __pycache__/
 code/data/
 code/saved_objects/
 code/trained_models/
+code/results/
+code/r/
+code/results_grid/
 
 # C extensions
 *.so
