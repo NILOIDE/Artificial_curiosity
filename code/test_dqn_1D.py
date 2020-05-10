@@ -38,23 +38,25 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
     returns = {'ext': [], 'int': [], 'len': []}
     eval_start = datetime.now()
     for i in range(n):
-        s_t = reset(env, obs_dim)
+        s_t = env.reset()
         s_t = torch.from_numpy(s_t).to(dtype=torch.float32)
+        s_t /= 256.0
         done = False
         total = {'ext': 0.0, 'int': 0.0, 'len': 0}
         while not done:
+            print(s_t.shape)
             a_t = alg.act(s_t, eval=True).item()
-            s_tp1, r_ext_t, done = step(env, a_t, s_t, obs_dim)
+            print(s_t.shape)
+            s_tp1, r_ext_t, done, _ = env.step(a_t)
             s_tp1 = torch.from_numpy(s_tp1).to(dtype=torch.float32)
-            r_int_t = wm.forward(s_t, torch.tensor([a_t,]), s_tp1)
+            s_tp1 /= 256.0
+            # r_int_t = wm.forward(s_t, torch.tensor([a_t,]), s_tp1)
             s_t = s_tp1
             total['ext'] += r_ext_t
-            total['int'] += r_int_t.item()
+            # total['int'] += r_int_t.item()
             total['len'] += 1
         returns['ext'].append(total['ext'])
         returns['int'].append(total['int'])
-        returns['len'].append(total['len'])
-
     env.close()
     print(f'Evaluation:  Returns: {returns["ext"]}\n',
           f'Int_returns: {returns["int"]}\n',
@@ -67,11 +69,13 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
 def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
     print('Filling buffer')
     while len(buffer) < kwargs['buffer_size']:
-        s_t = reset(env, obs_dim)
+        s_t = env.reset()
+        s_t /= 256.0
         done = False
         while not done:
             a_t = alg.act(torch.from_numpy(s_t).to(dtype=torch.float32), eps=1.0).item()
-            s_tp1, r_t, done = step(env, a_t, s_t, obs_dim)
+            s_tp1, r_t, done, _ = env.step(a_t)
+            s_tp1 /= 256.0
             buffer.add(s_t, a_t, r_t, s_tp1, done)
             if len(buffer) >= kwargs['buffer_size']:
                 break
@@ -93,18 +97,12 @@ def warmup_wm(alg, wm, buffer, visualise, **kwargs):
 
 def main(env, visualise, folder_name, **kwargs):
     buffer = ReplayBuffer(kwargs['buffer_size'])
-    obs_dim = (kwargs['frame_stack'] if kwargs['grayscale'] else 3*kwargs['frame_stack'], *kwargs['resize_dim'])
-    # obs_dim = env.observation_space.sample().shape
-    assert len(obs_dim) == 3, 'States should be image (C, W, H).'
-    assert (obs_dim[0] == kwargs['frame_stack'] and kwargs['grayscale']) or \
-           (obs_dim[0] == 3*kwargs['frame_stack'] and not kwargs['grayscale']),\
-        f'Expected channels first. Received: {obs_dim}'
+    obs_dim = env.observation_space.sample().shape
     a_dim = (env.action_space.n,)
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     print('Device:', device)
     alg = DQN(obs_dim, a_dim, device=device, **kwargs)
     if kwargs['encoder_type'] == 'none':
-        raise NotImplementedError
         wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
     else:
         wm = EncodedWorldModel(obs_dim, a_dim, device=device, **kwargs)
@@ -117,13 +115,15 @@ def main(env, visualise, folder_name, **kwargs):
         warmup_wm(alg, wm, buffer, visualise, **kwargs)
     print('Training...')
     while alg.train_steps < kwargs['train_steps']:
-        s_t = reset(env, obs_dim)
+        s_t = env.reset()
+        # s_t /= 256.0
         # env.render('human')
         done = False
         total = [0, 0]
         while not done:
             a_t = alg.act(torch.from_numpy(s_t).to(dtype=torch.float32)).item()
-            s_tp1, r_t, done = step(env, a_t, s_t, obs_dim)
+            s_tp1, r_t, done, _ = env.step(a_t)
+            # s_tp1 /= 256.0
             total[0] += r_t
             total[1] += 1
             buffer.add(s_t, a_t, r_t, s_tp1, done)

@@ -11,8 +11,9 @@ class Visualise:
         self.vis_args = kwargs
         self.folder_name = run_name
         self.writer = SummaryWriter(self.folder_name)
-        self.x_interval = kwargs['interval']
-        self.train_id = self.x_interval  # train count for visualisation
+        self.train_interval = kwargs['export_interval']
+        self.eval_interval = kwargs['eval_interval']
+        self.train_id = self.train_interval  # train count for visualisation
         self.eval_id = 0  # valid count for visualisation
         # os.mkdir('results/' + kwargs['name'])
         with open(f'{self.folder_name}/params{kwargs["time_stamp"]}.csv', mode='w') as f:
@@ -32,24 +33,33 @@ class Visualise:
             max = np.amax(img, axis=(1, 2))[:, np.newaxis, np.newaxis]
         else:
             raise AssertionError(f'Image must be Grayscale or RGB, but found channel dim was of size {img.shape[0]}')
-        # return np.sqrt((img - min) / (max - min + 1e-8))
+        # return np.sqrt(img / (max + 1e-8))
         return (img / (max + 1e-8))
 
     def train_iteration_update(self, t=None, **kwargs):
         if t is None:
             t = self.train_id
-            self.train_id += self.x_interval
+            self.train_id += self.train_interval
             self.writer.add_scalar("Training/WM loss", kwargs['wm_loss'], t)
             if 'wm_t_loss' in kwargs:
-                self.writer.add_scalar("Training/WM translation loss", kwargs['wm_t_loss'], t)
-            if 'wm_ng_loss' in kwargs:
-                self.writer.add_scalar("Training/WM negative sampling loss", kwargs['wm_ng_loss'], t)
+                self.writer.add_scalar("Training/WM translation loss", kwargs['wm_trans_loss'], t)
+            if 'wm_ns_loss' in kwargs:
+                self.writer.add_scalar("Training/WM negative sampling loss", kwargs['wm_ns_loss'], t)
+            if 'wm_inv_loss' in kwargs:
+                self.writer.add_scalar("Training/WM inverse model loss", kwargs['wm_inv_loss'], t)
+            if 'wm_vae_loss' in kwargs:
+                self.writer.add_scalar("Training/WM VAE loss", kwargs['wm_vae_loss'], t)
             self.writer.add_scalar("Training/Policy loss", kwargs['alg_loss'], t)
 
         self.writer.add_scalar("Training/Mean ep extrinsic rewards", kwargs['ext'], t)
         self.writer.add_scalar("Training/Mean step intrinsic rewards", kwargs['int'], t)
 
-    def eval_iteration_update(self, **kwargs):
+    def eval_iteration_update(self, ext, int):
+        self.writer.add_scalar("Evaluation/Mean ep extrinsic rewards", ext, self.eval_id)
+        self.writer.add_scalar("Evaluation/Mean ep intrinsic rewards", int, self.eval_id)
+        self.eval_id += self.eval_interval
+
+    def eval_gridworld_iteration_update(self, **kwargs):
         # self.writer.add_scalar("Evaluation/Mean ep extrinsic rewards", kwargs['ext'], self.eval_id)
         # self.writer.add_scalar("Evaluation/Mean step intrinsic rewards", kwargs['int'], self.eval_id)
         # self.writer.add_scalar("Evaluation/WM loss", kwargs['wm_loss'], self.eval_id)
@@ -58,7 +68,7 @@ class Visualise:
         if 'density_map' in kwargs:
             if len(kwargs['density_map'].shape) == 2:
                 kwargs['density_map'] = np.expand_dims(kwargs['density_map'], axis=0)
-            density_map = self.normalize(kwargs['density_map'])
+            density_map = self.normalize(kwargs['density_map'].clip(max=0.01))
             if 'walls_map' in kwargs and kwargs['walls_map'] is not None:
                 density_map_rgb = np.concatenate((density_map,
                                                   density_map + kwargs['walls_map'],
@@ -84,7 +94,7 @@ class Visualise:
             else:
                 self.writer.add_image("Evaluation/Prediction error map", pe_map, self.eval_id)
             # Density-Error RGB mix
-            if density_map is not None:
+            if density_map is not None and kwargs['walls_map'] is not None:
                 overlap = np.concatenate((pe_map,
                                           np.zeros_like(density_map) + kwargs['walls_map'],
                                           density_map), axis=0)
@@ -106,7 +116,19 @@ class Visualise:
                 self.writer.add_image("Evaluation/Argmax prediction error map", ape_map_rgb, self.eval_id)
             else:
                 self.writer.add_image("Evaluation/Argmax prediction error map", ape_map, self.eval_id)
-        self.eval_id += self.x_interval
+        self.eval_id += self.eval_interval
+
+    def eval_wm_warmup(self, t, **kwargs):
+        assert t <= 0
+        self.writer.add_scalar("Training/WM loss", kwargs['wm_loss'], t)
+        if 'wm_t_loss' in kwargs:
+            self.writer.add_scalar("Training/WM translation loss", kwargs['wm_trans_loss'], t)
+        if 'wm_ns_loss' in kwargs:
+            self.writer.add_scalar("Training/WM negative sampling loss", kwargs['wm_ns_loss'], t)
+        if 'wm_inv_loss' in kwargs:
+            self.writer.add_scalar("Training/WM inverse model loss", kwargs['wm_inv_loss'], t)
+        if 'wm_vae_loss' in kwargs:
+            self.writer.add_scalar("Training/WM VAE loss", kwargs['wm_vae_loss'], t)
 
     def close(self):
         self.writer.close()

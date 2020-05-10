@@ -6,7 +6,7 @@ from modules.encoders.base_encoder import BaseEncoder
 class Encoder_2D_Sigma(BaseEncoder):
 
     def __init__(self, x_dim, z_dim, conv_layers=None, fc_dim=512, batch_norm=True, device='cpu'):
-        # type: (tuple, tuple, int, tuple, bool, str) -> None
+        # type: (tuple, tuple, tuple, int, bool, str) -> None
         """"
         Any number of arbitrary convolutional layers can used. A layer is represented using a dictionary.
         Only one fully-connected layer is used. The latent representation is assumed to be Gaussian.
@@ -53,7 +53,7 @@ class Encoder_2D_Sigma(BaseEncoder):
 
 class Encoder_1D_Sigma(BaseEncoder):
 
-    def __init__(self, x_dim, z_dim, hidden_dim=(256,), batch_norm=False, device='cpu'):
+    def __init__(self, x_dim, z_dim, hidden_dim=(64,), batch_norm=False, device='cpu'):
         # type: (tuple, tuple, tuple, bool, str) -> None
         """"
         Any number of arbitrary convolutional layers can used. A layer is represented using a dictionary.

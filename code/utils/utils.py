@@ -3,40 +3,30 @@ import torchvision.transforms as transforms
 import cv2
 import numpy as np
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
 
-INPUT_X = 84
-INPUT_Y = 84
-INPUT_C = 3
-INPUT_DIM = (INPUT_C, INPUT_X, INPUT_Y)
 INPUT_INTERPOLATION = cv2.INTER_NEAREST
 
+CONV_LAYERS2014 = ({'channel_num': 32, 'kernel_size': 8, 'stride': 4, 'padding': 0},
+                   {'channel_num': 64, 'kernel_size': 4, 'stride': 2, 'padding': 0})
 
-def resize_torch(im: torch.Tensor,  dims: tuple) -> torch.Tensor:
+CONV_LAYERS2015 = ({'channel_num': 32, 'kernel_size': 8, 'stride': 4, 'padding': 0},
+                   {'channel_num': 64, 'kernel_size': 4, 'stride': 2, 'padding': 0},
+                   {'channel_num': 64, 'kernel_size': 3, 'stride': 1, 'padding': 0})
+
+
+def resize_torch(im: torch.Tensor, dims: tuple) -> torch.Tensor:
     p = transforms.Compose([transforms.Scale(dims)])
     return p(im)
 
 
-def resize_numpy(im: np.ndarray,  dims: tuple) -> np.ndarray:
-    if len(dims) == 2:
-        pass
-    elif len(dims) == 3:
-        if dims[0] == INPUT_C:
-            dims = dims[1:]
-        elif dims[2] == INPUT_C:
-            dims = dims[:2]
-        else:
-            raise ValueError("Wrong target dimension channel format.")
-    else:
-        raise ValueError("Wrong target dimension vector length.")
-    return cv2.resize(im, dims, interpolation=INPUT_INTERPOLATION)
-
-
-def resize_to_standard_dim_numpy(im: np.ndarray) -> np.ndarray:
+def resize_image_numpy(im: np.ndarray, dims: tuple) -> np.ndarray:
+    assert len(dims) == 2, 'cv2 resize takes in resize dims as tuple of length 2 (no channel dim).'
     im = im.astype(np.float)
-    return cv2.resize(im, (INPUT_Y, INPUT_Y), interpolation=INPUT_INTERPOLATION)
+    return cv2.resize(im, dims, interpolation=INPUT_INTERPOLATION)
 
 
 def rgb_to_gray(rgb, channels_first=True):
@@ -52,20 +42,13 @@ def rgb_to_gray(rgb, channels_first=True):
 
 
 def channel_first_numpy(im: np.ndarray) -> np.ndarray:
-    assert type(im) == np.ndarray
     assert len(tuple(im.shape)) == 3
-    if im.shape[0] == INPUT_C:
-        raise ValueError("Image already in channel first form")
-    assert im.shape[2] == INPUT_C
     return np.transpose(im, (2, 0, 1))
 
 
 def channel_last_numpy(im: np.ndarray) -> np.ndarray:
-    assert type(im) == np.ndarray
     assert len(tuple(im.shape)) == 3
-    assert im.shape[0] == INPUT_C or im.shape[2] == INPUT_C
-    if im.shape[2] == INPUT_C:
-        raise ValueError("Image already in channel last form")
+    assert im.shape[0] == 1 or im.shape[0] == 3, 'Expected image to be in channel first form'
     return np.transpose(im, (1, 2, 0))
 
 
@@ -73,12 +56,16 @@ def clip_rewards(r_t):
     return np.clip(r_t, -1.0, 1.0)
 
 
-def standardize_state(s_t, grayscale=False):
-    s_t = resize_to_standard_dim_numpy(s_t)
-    s_t = channel_first_numpy(s_t)
-    if grayscale:
+def standardize_state(s_t: np.ndarray, input_shape: tuple, grayscale=True) -> np.ndarray:
+    s_t = resize_image_numpy(s_t, input_shape[1:])
+    if not (s_t.shape[0] == input_shape[0] or s_t.shape[0] == input_shape[0]*3):
+        s_t = channel_first_numpy(s_t)
+    else:
+        assert input_shape[0] == input_shape[0] or \
+               input_shape[0] == input_shape[0]*3, 'input shape must be channels first for torch to be happy'
+    if grayscale and s_t.shape[0] == 3:
         s_t = rgb_to_gray(s_t)
-    s_t /= 256
+    s_t /= 256.0
     return s_t
 
 
@@ -142,4 +129,3 @@ def plot_list_in_dict(lists, x_min=0, x_interval=1, y_low=None, y_high=None,
     if show:
         plt.show()
     plt.close(fig)
-

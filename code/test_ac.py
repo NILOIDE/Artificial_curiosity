@@ -5,8 +5,8 @@ import gym
 from modules.replay_buffers.replay_buffer import ReplayBuffer
 from modules.encoders.random_encoder import RandomEncoder_2D
 from modules.world_models.forward_model import ForwardModel
-from utils.utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
-from modules.decoders.decoder import Decoder_2D
+from utils.utils import resize_image_numpy, channel_first_numpy, INPUT_DIM
+from modules.decoders.decoder import Decoder_2D_conv
 torch.set_printoptions(edgeitems=10)
 
 
@@ -19,9 +19,9 @@ class RandEncoderArchitecture:
         self.encoder = RandomEncoder_2D(x_dim=x_dim,
                                         device=self.device,
                                         z_dim=(40,))
-        self.decoder = Decoder_2D(z_dim=self.encoder.get_z_dim(),
-                                  x_dim=x_dim,
-                                  device=self.device)
+        self.decoder = Decoder_2D_conv(z_dim=self.encoder.get_z_dim(),
+                                       x_dim=x_dim,
+                                       device=self.device)
         self.loss_func_d = nn.BCELoss(reduction='none').to(self.device)
         self.optimizer_d = torch.optim.Adam(self.decoder.parameters())
 
@@ -86,13 +86,13 @@ def main(env):
     model = RandEncoderArchitecture(obs_dim, a_dim)
     for ep in range(20):
         s_t = env.reset()
-        s_t = channel_first_numpy(resize_to_standard_dim_numpy(s_t)) / 256  # Reshape and normalise input
+        s_t = channel_first_numpy(resize_image_numpy(s_t)) / 256  # Reshape and normalise input
         # env.render('human')
         done = False
         while not done:
             a_t = torch.randint(a_dim[0], (1,))
             s_tp1, r_t, done, _ = env.step(a_t)
-            s_tp1 = channel_first_numpy(resize_to_standard_dim_numpy(s_tp1)) / 256  # Reshape and normalise input
+            s_tp1 = channel_first_numpy(resize_image_numpy(s_tp1)) / 256  # Reshape and normalise input
             # env.render('human')
             buffer.add(s_t, a_t, r_t, s_tp1, done)
             s_t = s_tp1

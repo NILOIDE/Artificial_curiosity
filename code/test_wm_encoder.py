@@ -6,7 +6,7 @@ from modules.replay_buffers.replay_buffer import ReplayBuffer
 from modules.world_models.forward_model import ForwardModel_SigmaInputOutput
 from utils.utils import INPUT_DIM
 from modules.encoders.learned_encoders import Encoder_2D_Sigma
-from modules.decoders.decoder import Decoder_2D
+from modules.decoders.decoder import Decoder_2D_conv
 
 import copy
 import pickle
@@ -98,10 +98,10 @@ class Architecture:
         self.model = Model(x_dim, a_dim, device=self.device)  # type: Model
         self.optimizer_wm = torch.optim.Adam(self.model.parameters(), lr=0.0001)
 
-        self.decoder = Decoder_2D(z_dim=self.model.z_dim,
-                                  x_dim=x_dim,
-                                  device=self.device)
-        self.loss_func_d = nn.BCELoss().to(self.device)  # type: Decoder_2D
+        self.decoder = Decoder_2D_conv(z_dim=self.model.z_dim,
+                                       x_dim=x_dim,
+                                       device=self.device)
+        self.loss_func_d = nn.BCELoss().to(self.device)  # type: Decoder_2D_conv
         self.optimizer_d = torch.optim.Adam(self.decoder.parameters(), lr=0.0001)
 
         self.losses = {'world_model': [], 'decoder': []}

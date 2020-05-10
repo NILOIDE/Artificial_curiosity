@@ -79,7 +79,7 @@ class BaseForwardModel(nn.Module):
 
 class ForwardModel(BaseForwardModel):
 
-    def __init__(self, x_dim, a_dim, hidden_dim=(256,), device='cpu'):
+    def __init__(self, x_dim, a_dim, hidden_dim=(512,), device='cpu'):
         # type: (tuple, tuple, tuple, str) -> None
         """"
         A world model predicts the state at t+1, given state at t using a feed-forward model.

@@ -20,13 +20,14 @@ class SimpleGridWorld(gym.Env):
             raise ValueError('Number of dimensions should be larger than zero.')
         self.size = size
         self.observation_space = spaces.Tuple((spaces.Discrete(2) for _ in range(int(np.prod(size)))))
+        # self.observation_space = spaces.Box(0, 1, [*size, 1])
         self.action_space = spaces.Discrete(self.n_dims * 2 + 1)
         self.pos = None
         self.start_pos = [self.size[i] // 2 for i in range(self.n_dims)]
         self.last_state = None
         self.visitation_count = np.zeros(self.size, dtype=np.int)
         self.t = 0
-        self.history_len = np.prod(size) * 100
+        self.history_len = np.prod(size) * 20
         self.visitation_history = []
 
     def step(self, a):

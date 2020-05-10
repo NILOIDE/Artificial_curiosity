@@ -27,10 +27,10 @@ class DQN:
         if len(x_dim) == 1:
             self.network = Network1D(x_dim, a_dim, device=device)  # type: Network1D
         else:
-            self.network = Network2D(x_dim, a_dim, device=device)  # type: Network2D
+            self.network = Network2D(x_dim, a_dim, device=device, **kwargs)  # type: Network2D
         self.loss_func = torch.nn.SmoothL1Loss().to(device)
         # self.loss_func = torch.nn.MSELoss.to(device)
-        self.optimizer = kwargs['alg_optimizer'](self.network.parameters(), lr=kwargs['alg_lr'])
+        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=kwargs['alg_lr'])
         self.soft_target = kwargs['alg_soft_target']
         self.target_network_steps = kwargs['alg_target_net_steps']
         self.target_network = None
@@ -38,18 +38,21 @@ class DQN:
             self.target_network = copy.deepcopy(self.network).to(device)
         self.losses = []
         self.train_steps = 0
+        print('DQN Architecture:')
         print(self.network)
 
-    def act(self, s_t, eval=False):
-        # type: (torch.Tensor, bool) -> torch.tensor
+    def act(self, s_t, eval=False, eps=None):
+        # type: (torch.Tensor, bool, float) -> torch.tensor
         """"
         Return argmax over all actions for given states.
         """
-        if eval or random.random() >= self.epsilon:
+        if eps is None:
+            eps = self.epsilon
+        if eval or random.random() >= eps:
             with torch.no_grad():
                 return torch.argmax(self.network(s_t), dim=1)
         else:
-            if len(s_t.shape) == 1:
+            if len(s_t.shape) == len(self.x_dim):
                 batch_size = 1
             else:
                 batch_size = s_t.shape[0]
@@ -74,12 +77,14 @@ class DQN:
         assert torch.isnan(r_t).sum() == 0
         self.network.zero_grad()
         idx = torch.arange(a_t.shape[0]).long()
-        q_t = self.network(s_t)[idx, a_t]
+        q_t = self.network(s_t)#[idx, a_t]
         bootstrap_network = self.target_network if self.target_network is not None else self.network
         with torch.no_grad():
-            q_t_target = r_t + (-d_t + 1).float() * self.gamma * bootstrap_network(s_tp1).detach().max(dim=1).values
-        assert len(tuple(q_t.shape)) == 1
-        assert len(tuple(q_t_target.shape)) == 1
+            q_t_target = q_t.clone().detach()
+            t = r_t + (-d_t + 1).float() * self.gamma * bootstrap_network(s_tp1).detach().max(dim=1).values
+            assert len(t.shape) == 1
+            assert t.shape[0] == q_t.shape[0]
+            q_t_target[idx, a_t] = t
         loss = self.loss_func(q_t, q_t_target)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), 1.0)

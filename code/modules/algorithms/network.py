@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class Network1D(nn.Module):
 
-    def __init__(self, x_dim, y_dim, hidden_dim=(256,), device='cpu'):
+    def __init__(self, x_dim, y_dim, hidden_dim=(32,), device='cpu'):
         # type: (tuple, tuple, tuple, str) -> None
         super().__init__()
         self.x_dim = x_dim
@@ -48,17 +48,13 @@ class Network2D(nn.Module):
         def forward(self, x):
             return x.view(x.size()[0], -1)
 
-    STANDARD_CONV = ({'channel_num': 32, 'kernel_size': 8, 'stride': 4, 'padding': 0},
-                     {'channel_num': 64, 'kernel_size': 4, 'stride': 2, 'padding': 0},
-                     {'channel_num': 64, 'kernel_size': 3, 'stride': 1, 'padding': 0})
-
-    def __init__(self, x_dim, y_dim, conv_layers=None, fc_dim=512, device='cpu'):
-        # type: (tuple, tuple, tuple, int, str) -> None
+    def __init__(self, x_dim, y_dim, fc_dim=512, device='cpu', **kwargs):
+        # type: (tuple, tuple, int, str, dict) -> None
         super().__init__()
         self.x_dim = x_dim
         self.y_dim = y_dim
         self.device = device
-        self.conv_layers = self.STANDARD_CONV if conv_layers is None else conv_layers
+        self.conv_layers = kwargs['conv_layers']
         self.layers = []
         prev_channels = x_dim[0]
         prev_dim_x = x_dim[1]
@@ -77,10 +73,11 @@ class Network2D(nn.Module):
         self.layers.append(nn.Linear(prev_dim_x * prev_dim_y * prev_channels, fc_dim))
         self.layers.append(nn.ReLU())
         self.layers.append(nn.Linear(fc_dim, y_dim[0]))
-        self.model = nn.Sequential(*self.layers).to(device)
+        self.model = nn.Sequential(*self.layers).to(device=device)#, memory_format=torch.channels_last)
 
     def forward(self, s_t: torch.Tensor) -> torch.Tensor:
-        # s_t = self.apply_tensor_constraints(s_t)
+        s_t = self.apply_tensor_constraints(s_t)
+        # s_t = s_t.to(memory_format=torch.channels_last)
         return self.model(s_t)
 
     def apply_tensor_constraints(self, x: torch.Tensor) -> torch.Tensor:
@@ -91,7 +88,7 @@ class Network2D(nn.Module):
             x = x.unsqueeze(0)
         if self.cuda and not x.is_cuda:
             x = x.to(self.device)
-        assert tuple(x.shape[1:]) == self.x_dim
+        assert tuple(x.shape[1:]) == self.x_dim, f'{ tuple(x.shape[1:])} {self.x_dim}'
         return x
 
     def get_z_dim(self) -> tuple:

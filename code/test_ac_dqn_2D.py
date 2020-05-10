@@ -5,7 +5,7 @@ import numpy as np
 from modules.replay_buffers.replay_buffer import DynamicsReplayBuffer, ReplayBuffer
 from modules.algorithms.DQN import DQN
 from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder
-from utils.utils import standardize_state, transition_to_torch
+from utils.utils import standardize_state, transition_to_torch_no_r
 from utils.visualise import Visualise
 from datetime import datetime
 import os
@@ -18,10 +18,10 @@ def step(env, a_t, s_t, obs_dim):
     """"
     Add the new frame to the top of the stack.
     """
-    new_frame, r_t, done, _ = env.step(a_t)
+    new_frame, r_t, done, info = env.step(a_t)
     new_frame = standardize_state(new_frame, obs_dim, grayscale=True)
     s_tp1 = np.concatenate((s_t[1:], new_frame), axis=0)  # Oldest frame is at index 0
-    return s_tp1, r_t, done
+    return s_tp1, r_t, done, info
 
 
 def reset(env, obs_dim):
@@ -44,9 +44,9 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
         total = {'ext': 0.0, 'int': 0.0, 'len': 0}
         while not done:
             a_t = alg.act(s_t, eval=True).item()
-            s_tp1, r_ext_t, done = step(env, a_t, s_t, obs_dim)
+            s_tp1, r_ext_t, done, info = step(env, a_t, s_t, obs_dim)
             s_tp1 = torch.from_numpy(s_tp1).to(dtype=torch.float32)
-            r_int_t = wm.forward(s_t, torch.tensor([a_t,]), s_tp1)
+            r_int_t = wm.forward(s_t, torch.tensor([a_t, ]), s_tp1)
             s_t = s_tp1
             total['ext'] += r_ext_t
             total['int'] += r_int_t.item()
@@ -54,12 +54,11 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
         returns['ext'].append(total['ext'])
         returns['int'].append(total['int'])
         returns['len'].append(total['len'])
-
     env.close()
     print(f'Evaluation:  Returns: {returns["ext"]}\n',
           f'Int_returns: {returns["int"]}\n',
           f'Lengths: {returns["len"]}\n',
-          f'Eval time: {int((datetime.now() - eval_start).total_seconds())}s.',
+          f'Eval time: {(datetime.now() - eval_start).total_seconds()}s.\n',
           f'Num episodes: {n}')
     return {'ext': np.mean(returns['ext']), 'int': np.mean(returns['int'])}
 
@@ -71,8 +70,8 @@ def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
         done = False
         while not done:
             a_t = alg.act(torch.from_numpy(s_t).to(dtype=torch.float32), eps=1.0).item()
-            s_tp1, r_t, done = step(env, a_t, s_t, obs_dim)
-            buffer.add(s_t, a_t, r_t, s_tp1, done)
+            s_tp1, r_t, done, info = step(env, a_t, s_t, obs_dim)
+            buffer.add(s_t, a_t, s_tp1, done)
             if len(buffer) >= kwargs['buffer_size']:
                 break
             s_t = s_tp1
@@ -85,14 +84,14 @@ def warmup_wm(alg, wm, buffer, visualise, **kwargs):
     print('Warming up world model...')
     for i in range(-kwargs['wm_warmup_steps'] + 1, 0 + 1):
         batch = buffer.sample(kwargs['batch_size'])
-        obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch(*batch)
+        obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
         r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
         if alg.train_steps % kwargs['interval'] == 0:
             visualise.eval_wm_warmup(i, **{k: np.mean(i[-100:]) for k, i in wm.losses.items() if i != []})
 
 
 def main(env, visualise, folder_name, **kwargs):
-    buffer = ReplayBuffer(kwargs['buffer_size'])
+    buffer = DynamicsReplayBuffer(kwargs['buffer_size'])
     obs_dim = (kwargs['frame_stack'] if kwargs['grayscale'] else 3*kwargs['frame_stack'], *kwargs['resize_dim'])
     # obs_dim = env.observation_space.sample().shape
     assert len(obs_dim) == 3, 'States should be image (C, W, H).'
@@ -123,19 +122,29 @@ def main(env, visualise, folder_name, **kwargs):
         total = [0, 0]
         while not done:
             a_t = alg.act(torch.from_numpy(s_t).to(dtype=torch.float32)).item()
-            s_tp1, r_t, done = step(env, a_t, s_t, obs_dim)
+            s_tp1, r_t, done, info = step(env, a_t, s_t, obs_dim)
             total[0] += r_t
             total[1] += 1
-            buffer.add(s_t, a_t, r_t, s_tp1, done)
+            buffer.add(s_t, a_t, s_tp1, done)
             s_t = s_tp1
             # env.render('human')
             if alg.train_steps < kwargs['train_steps']:
                 batch = buffer.sample(kwargs['batch_size'])
-                obs_t_batch, a_t_batch, r_t_batch, obs_tp1_batch, dones_batch = transition_to_torch(*batch)
+                obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
                 r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
                 total_history['int']['mean'].append(r_int_t.mean().item())
-
-                alg.train(obs_t_batch, a_t_batch, r_t_batch, obs_tp1_batch, dones_batch)
+                # total_history['int']['std'].append(r_int_t.std().item())
+                # r_mean = np.mean(total_history['int']['mean'][-100:])
+                # r_std = np.mean(total_history['int']['std'][-100:])+1e-8 if len(total_history['int']['std'])>1 else 1.0
+                # r_mean = total_history['int']['mean'][-1]
+                # r_std = r_int_t.std()
+                r_min, r_max = r_int_t.min(), r_int_t.max()
+                # total_history['int']['min'].append(r_min)
+                # total_history['int']['max'].append(r_max)
+                # r_min = np.min(total_history['int']['min'][-1000:])
+                # r_max = np.max(total_history['int']['max'][-1000:])
+                r_range = r_max - r_min + 1e-10
+                alg.train(obs_t_batch, a_t_batch, (r_int_t - r_min) / r_range, obs_tp1_batch, dones_batch)
 
                 if done:
                     total_history['ext'].append(total[0])

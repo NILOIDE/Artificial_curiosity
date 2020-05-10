@@ -4,7 +4,7 @@ import gym
 from modules.replay_buffers.replay_buffer import ReplayBuffer
 from modules.encoders.vae import VAE
 from modules.world_models.forward_model import WorldModel_Sigma
-from utils.utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
+from utils.utils import resize_image_numpy, channel_first_numpy, INPUT_DIM
 import copy
 
 torch.set_printoptions(edgeitems=10)
@@ -120,13 +120,13 @@ def main(env):
     model = VAEArchitecture(obs_dim, a_dim)
     for ep in range(40):
         s_t = env.reset()
-        s_t = channel_first_numpy(resize_to_standard_dim_numpy(s_t)) / 256  # Reshape and normalise input
+        s_t = channel_first_numpy(resize_image_numpy(s_t)) / 256  # Reshape and normalise input
         # env.render('human')
         done = False
         while not done:
             a_t = torch.randint(a_dim[0], (1,))
             s_tp1, r_t, done, _ = env.step(a_t)
-            s_tp1 = channel_first_numpy(resize_to_standard_dim_numpy(s_tp1)) / 256  # Reshape and normalise input
+            s_tp1 = channel_first_numpy(resize_image_numpy(s_tp1)) / 256  # Reshape and normalise input
             # env.render('human')
             buffer.add(s_t, a_t, r_t, s_tp1, done)
             s_t = s_tp1

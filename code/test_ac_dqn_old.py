@@ -128,13 +128,12 @@ def main(env, visualise, **kwargs):
                           'E(G_int):', ep_scores['Mean intrinsic reward'][-1], '\n',
                           'Eps:', alg.epsilon,
                           'Time elapsed:', str(elapsed_time[0]) +':'+ str(elapsed_time[1]) +':'+ str(elapsed_time[2]))
-                    print(info['counts'])
 
-                    wm.save(path='saved_objects/'+kwargs['name']+'WM.pt')
-                    alg.save(path='saved_objects/'+kwargs['name']+'DQN.pt')
+                    # wm.save(path='saved_objects/'+kwargs['name']+'WM.pt')
+                    # alg.save(path='saved_objects/'+kwargs['name']+'DQN.pt')
                     visualise.train_iteration_update(ext=ep_scores['DQN'][-1],
                                                      int=ep_scores['Mean intrinsic reward'][-1],
-                                                     wm_loss=np.mean(wm.losses['wm'][-100:]),
+                                                     wm_loss=np.mean(wm.losses['wm_loss'][-100:]),
                                                      # wm_t_loss=np.mean(wm.losses['wm_trans'][-100:]),
                                                      # wm_ng_loss=np.mean(wm.losses['wm_ns'][-100:]),
                                                      alg_loss=np.mean(alg.losses[-100:]))
@@ -144,32 +143,41 @@ def main(env, visualise, **kwargs):
 
 
 if __name__ == "__main__":
-    env_name = 'Breakout-ram-v4'
-    args = {'save_dir': 'r/',
+    env_name = 'CartPole-v0'
+    args = {'save_dir': 'results/',
             'env_name': env_name,
-            'name': env_name + '',
+            'name': 'test',
+            'time_stamp': datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f"),
             'seed': 1,
-            'interval': 100,
-            'buffer_size': int(2e4),
-            'train_steps': int(2e5),
+            'interval': 500,
+            'buffer_size': int(5e2),
+            'train_steps': int(10e4),
             'gamma': 0.99,
-            'eps_static': False,
-            'eps_half': 0.08,  ##########################
-            'eps_min': 0.05,
-            'alg_target_net_steps': 500,
-            'alg_lr': 0.001,
+            'eps_static': True,
+            'eps_half': 0.08,
+            'eps_min': 0.1,
+            'batch_size': 256,
+            'alg_target_net_steps': 0,
+            'alg_soft_target': False,
+            'alg_lr': 0.01,
             'z_dim': (32,),
-            'wm_target_net_steps': 500,
+            'wm_target_net_steps': 0,
             'wm_soft_target': False,
             'wm_tau': 0.01,
-            'wm_optimizer': torch.optim.Adam,
             'wm_lr': 0.001,
+            'wm_warmup_steps': 0,
+            'encoder_type': 'none',
+            'decoder': False,
             'stochastic_latent': False,
-            'encoder_batchnorm': True,
+            'encoder_batchnorm': False,
             'neg_samples': 3,
             'hinge_value': 1.0}
+    np.random.seed(args['seed'])
+    torch.manual_seed(args['seed'])
+    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}_-_{args['name']}/"
+    print(run_name)
     environment = gym.make(env_name)
-    visualise = Visualise(**args)
+    visualise = Visualise(run_name, **args)
     try:
         main(environment, visualise, **args)
     finally:

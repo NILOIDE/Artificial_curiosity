@@ -5,11 +5,10 @@ __pycache__/
 
 # My stuff
 code/data/
-code/saved_objects/
 code/trained_models/
 code/results/
-code/r/
 code/results_grid/
+code/results_test/
 
 # C extensions
 *.so

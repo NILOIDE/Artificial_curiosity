@@ -62,10 +62,9 @@ def eval_wm(wm, folder_name, env_name, save_name=None):
                 env.pos = [i, j]
                 ns = env.step(a)[0]#.reshape((size, size))
                 if isinstance(wm, EncodedWorldModel):
-                    z_t = wm.encode(s.reshape((1,-1)))
-                    z_diff = wm.next_z_from_z(z_t, torch.tensor([a]))
+                    z_tp1_p = wm.next(s.reshape((1,-1)), torch.tensor([a]))
                     z_tp1 = wm.encode(torch.from_numpy(ns).type(torch.float))
-                    prediction_error[i, j] += (z_t + z_diff - z_tp1).abs().sum().item() / 2 / a_dim
+                    prediction_error[i, j] += (z_tp1_p - z_tp1).abs().sum().item() / 2 / a_dim
                 else:
                     pns = wm.next(s.reshape((1, -1,)), torch.tensor([a])).numpy()#.reshape((size, size))
                     argmax_prediction_error[i, j] += np.sum(np.abs(ns - (pns == pns.max()))) / 2 / a_dim

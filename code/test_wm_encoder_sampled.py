@@ -4,9 +4,9 @@ import torch.nn as nn
 import gym
 from modules.replay_buffers.replay_buffer import ReplayBuffer
 from modules.world_models.forward_model import ForwardModel_SigmaOutputOnly
-from utils.utils import resize_to_standard_dim_numpy, channel_first_numpy, INPUT_DIM
+from utils.utils import resize_image_numpy, channel_first_numpy, INPUT_DIM
 from modules.encoders.learned_encoders import Encoder_2D_Sigma
-from modules.decoders.decoder import Decoder_2D
+from modules.decoders.decoder import Decoder_2D_conv
 
 import copy
 import pickle
@@ -101,10 +101,10 @@ class Architecture:
         self.model = Model(x_dim, a_dim, device=self.device)  # type: Model
         self.optimizer_wm = torch.optim.Adam(self.model.parameters(), lr=0.0001)
 
-        self.decoder = Decoder_2D(z_dim=self.model.z_dim,
-                                  x_dim=x_dim,
-                                  device=self.device)
-        self.loss_func_d = nn.BCELoss().to(self.device)  # type: Decoder_2D
+        self.decoder = Decoder_2D_conv(z_dim=self.model.z_dim,
+                                       x_dim=x_dim,
+                                       device=self.device)
+        self.loss_func_d = nn.BCELoss().to(self.device)  # type: Decoder_2D_conv
         self.optimizer_d = torch.optim.Adam(self.decoder.parameters(), lr=0.0001)
 
         self.losses = {'world_model': [], 'decoder': []}
@@ -179,14 +179,14 @@ def main(env):
     model = Architecture(obs_dim, a_dim)
     for ep in range(100):
         s_t = env.reset()
-        s_t = channel_first_numpy(resize_to_standard_dim_numpy(s_t)) / 256  # Reshape and normalise input
+        s_t = channel_first_numpy(resize_image_numpy(s_t)) / 256  # Reshape and normalise input
         done = False
         while not done:
             a_t = torch.randint(a_dim[0], (1,))
             for i in range(3):
                 _ = env.step(a_t)
             s_tp1, r_t, done, _ = env.step(a_t)
-            s_tp1 = channel_first_numpy(resize_to_standard_dim_numpy(s_tp1)) / 256  # Reshape and normalise input
+            s_tp1 = channel_first_numpy(resize_image_numpy(s_tp1)) / 256  # Reshape and normalise input
             buffer.add(s_t, a_t, r_t, s_tp1, done)
             s_t = s_tp1
             if done:

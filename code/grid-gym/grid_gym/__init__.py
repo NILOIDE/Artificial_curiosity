@@ -22,6 +22,6 @@ register(id='GridWorldBox11x11-v0',
 
 register(id='GridWorldSpiral28x28-v0',
          entry_point='grid_gym.envs:GridWorldSpiral28x28',
-         max_episode_steps=250
+         max_episode_steps=28*30
          )
 
