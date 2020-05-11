@@ -5,7 +5,7 @@
 #SBATCH --partition=gpu_short
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=nil.stoltanso@student.uva.nl
-#SBATCH --output=name%j_idf.out
+#SBATCH --output=name%j_test.out
 module purge
 module load 2019
 module load Anaconda3/2018.12
