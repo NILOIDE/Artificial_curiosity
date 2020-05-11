@@ -7,7 +7,7 @@ conda create --name AC python=3.7.2 cudatoolkit=10.1 -y
 . /sw/arch/Debian9/EB_production/2019/software/Anaconda3/2018.12/etc/profile.d/conda.sh
 conda activate AC
 
-pip install --user -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
+pip install --user -r requirements.txt
 # Install atari-py
 pip install --no-index -f https://github.com/Kojoley/atari-py/releases atari_py
 
