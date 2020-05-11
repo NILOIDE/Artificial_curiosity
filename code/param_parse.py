@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=20000)
     parser.add_argument('--buffer_size', type=int, default=int(5e3))
-    parser.add_argument('--train_steps', type=int, default=int(3e6))
+    parser.add_argument('--train_steps', type=int, default=int(1e6))
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--eps_static', type=bool, default=True)
     parser.add_argument('--eps_half', help='Epsilon at half t in exponential epsilon decay', type=float, default=0.08)

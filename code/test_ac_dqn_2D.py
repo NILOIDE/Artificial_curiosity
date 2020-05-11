@@ -85,7 +85,7 @@ def reset(env, obs_dim):
     return s_t
 
 
-def evaluate(env_name, alg, wm, obs_dim, n=1):
+def evaluate(env_name, alg, wm, obs_dim, n=3):
     print('Evaluating...', end='\r')
     eval_start = datetime.now()
     env = gym.make(env_name)
