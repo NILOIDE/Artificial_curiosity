@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=0-00:10:00
+#SBATCH --time=0-00:15:00
 #SBATCH --mem=20000M
 #SBATCH --nodes=1
 #SBATCH --partition=gpu_short
