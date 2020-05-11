@@ -602,8 +602,6 @@ class WorldModelNoEncoder:
     def forward(self, x_t, a_t, x_tp1):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> torch.Tensor
         x_t, x_tp1, a_t = x_t.to(self.device), x_tp1.to(self.device), a_t.to(self.device)
-        assert x_t.shape == x_tp1.shape
-        # assert tuple(x_t.shape[1:]) == self.x_dim, f'Received: {tuple(x_t.shape[-1:])} and {self.x_dim}'
         with torch.no_grad():
             x_tp1_prime = self.model(x_t, a_t)
             # x_tp1_prime = torch.nn.functional.softmax(x_tp1_prime, dim=1)
@@ -612,10 +610,6 @@ class WorldModelNoEncoder:
 
     def train(self, x_t, a_t, x_tp1, **kwargs):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
-        x_t, x_tp1, a_t = x_t.to(self.device), x_tp1.to(self.device), a_t.to(self.device)
-        assert x_t.shape == x_tp1.shape
-        assert tuple(x_t.shape[1:]) == self.x_dim
-
         self.model.zero_grad()
         x_tp1_prime = self.model(x_t, a_t)
         # x_tp1_prime = torch.nn.functional.softmax(x_tp1_prime, dim=1)
