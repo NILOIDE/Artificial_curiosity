@@ -1,5 +1,6 @@
 #!/bin/bash
 
+module purge
 module load 2019
 module load Anaconda3/2018.12
 
