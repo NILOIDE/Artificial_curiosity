@@ -14,6 +14,59 @@ np.set_printoptions(linewidth=400)
 np.seterr(all='raise')
 
 
+def set_intr_rew_norm_type(type):
+    """"
+    Rather than having a string to compare against (O(n)) every time we want to check which normalization
+    type we should follow, have a dict of booleans (O(1)).
+    """
+    if type == 'none':
+        return None
+    d = {'max': False, 'whiten': False, 'history': False}
+    if type == 'max':
+        d['max'] = True
+    elif type == 'max_history':
+        d['max'] = True
+        d['history'] = True
+    elif type == 'whiten':
+        d['whiten'] = True
+    elif type == 'whiten_history':
+        d['whiten'] = True
+        d['history'] = True
+    else:
+        raise ValueError('Reward normalization type not recognized')
+    return d
+
+
+def intr_reward_bookkeeping(r_int_t, history, intr_rew_norm):
+    history['int']['mean'].append(r_int_t.mean().item())
+    if intr_rew_norm is not None:
+        if intr_rew_norm['history']:
+            if intr_rew_norm['max']:
+                r_min, r_max = r_int_t.min(), r_int_t.max()
+                history['int']['min'].append(r_min)
+                history['int']['max'].append(r_max)
+            elif intr_rew_norm['whiten']:
+                history['int']['std'].append(r_int_t.std().item())
+
+
+def normalize_rewards(r_int_t, history, norm_type):
+    if norm_type['max']:
+        if norm_type['history']:
+            r_min, r_max = np.min(history['int']['min'][-1000:]), np.max(history['int']['max'][-1000:])
+        else:
+            r_min, r_max = r_int_t.min(), r_int_t.max()
+        r_range = r_max - r_min + 1e-10
+        return (r_int_t - r_min) / r_range
+    if norm_type['whiten']:
+        if norm_type['history']:
+            r_mean = np.mean(history['int']['mean'][-100:])
+            r_std = np.mean(history['int']['std'][-100:]) + 1e-8 if len(history['int']['std']) > 1 else 1.0
+        else:
+            r_mean = history['int']['mean'][-1]  # Mean is already calculated during book keeping
+            r_std = r_int_t.std()
+        return (r_int_t - r_mean) / r_std
+
+
 def step(env, a_t, s_t, obs_dim):
     """"
     Add the new frame to the top of the stack.
@@ -32,11 +85,11 @@ def reset(env, obs_dim):
     return s_t
 
 
-def evaluate(env_name, alg, wm, obs_dim, n=3):
+def evaluate(env_name, alg, wm, obs_dim, n=1):
     print('Evaluating...', end='\r')
+    eval_start = datetime.now()
     env = gym.make(env_name)
     returns = {'ext': [], 'int': [], 'len': []}
-    eval_start = datetime.now()
     for i in range(n):
         s_t = reset(env, obs_dim)
         s_t = torch.from_numpy(s_t).to(dtype=torch.float32)
@@ -107,6 +160,7 @@ def main(env, visualise, folder_name, **kwargs):
         wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
     else:
         wm = EncodedWorldModel(obs_dim, a_dim, device=device, **kwargs)
+    intr_rew_norm = set_intr_rew_norm_type(kwargs['intr_rew_norm_type'])
     ep_scores = {'DQN': [0.0], 'Mean intrinsic reward': [0.0]}
     start_time = datetime.now()
     total_history = {'ext': [0.0], 'int': {'mean': [], 'std': [], 'min': [], 'max': []}, 'len': []}
@@ -132,19 +186,10 @@ def main(env, visualise, folder_name, **kwargs):
                 batch = buffer.sample(kwargs['batch_size'])
                 obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
                 r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
-                total_history['int']['mean'].append(r_int_t.mean().item())
-                # total_history['int']['std'].append(r_int_t.std().item())
-                # r_mean = np.mean(total_history['int']['mean'][-100:])
-                # r_std = np.mean(total_history['int']['std'][-100:])+1e-8 if len(total_history['int']['std'])>1 else 1.0
-                # r_mean = total_history['int']['mean'][-1]
-                # r_std = r_int_t.std()
-                r_min, r_max = r_int_t.min(), r_int_t.max()
-                # total_history['int']['min'].append(r_min)
-                # total_history['int']['max'].append(r_max)
-                # r_min = np.min(total_history['int']['min'][-1000:])
-                # r_max = np.max(total_history['int']['max'][-1000:])
-                r_range = r_max - r_min + 1e-10
-                alg.train(obs_t_batch, a_t_batch, (r_int_t - r_min) / r_range, obs_tp1_batch, dones_batch)
+                intr_reward_bookkeeping(r_int_t, total_history, intr_rew_norm)
+                if intr_rew_norm is not None:
+                    r_int_t = normalize_rewards(r_int_t, total_history, intr_rew_norm)
+                alg.train(obs_t_batch, a_t_batch, r_int_t, obs_tp1_batch, dones_batch)
 
                 if done:
                     total_history['ext'].append(total[0])

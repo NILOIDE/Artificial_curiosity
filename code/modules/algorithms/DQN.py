@@ -71,13 +71,10 @@ class DQN:
         assert len(tuple(a_t.shape)) == 1
         assert len(tuple(r_t.shape)) == 1
         assert len(tuple(d_t.shape)) == 1
-        if torch.isnan(r_t).sum() != 0:
-            print(r_t)
-            quit()
-        assert torch.isnan(r_t).sum() == 0
+        assert torch.isnan(r_t).sum() == 0, r_t
         self.network.zero_grad()
         idx = torch.arange(a_t.shape[0]).long()
-        q_t = self.network(s_t)#[idx, a_t]
+        q_t = self.network(s_t)
         bootstrap_network = self.target_network if self.target_network is not None else self.network
         with torch.no_grad():
             q_t_target = q_t.clone().detach()
