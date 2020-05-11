@@ -1,14 +1,8 @@
 #atari-py==0.2.6
-#-e git+https://github.com/NILOIDE/Adversarial_curiosity/@de5d5558b4d67c4f1751a3806da13590f0df1ca7#egg=GridWorld10x10&subdirectory=code\grid-gym
-#-e git+https://github.com/NILOIDE/Adversarial_curiosity/@de5d5558b4d67c4f1751a3806da13590f0df1ca7#egg=GridWorld25x25&subdirectory=code\grid-gym
-#-e git+https://github.com/NILOIDE/Adversarial_curiosity/@de5d5558b4d67c4f1751a3806da13590f0df1ca7#egg=GridWorld40x40&subdirectory=code\grid-gym
-#-e git+https://github.com/NILOIDE/Adversarial_curiosity/@de5d5558b4d67c4f1751a3806da13590f0df1ca7#egg=GridWorldBox11x11&subdirectory=code\grid-gym
-#-e git+https://github.com/NILOIDE/Adversarial_curiosity/@de5d5558b4d67c4f1751a3806da13590f0df1ca7#egg=GridWorldSpiral28x28&subdirectory=code\grid-gym
 gym==0.10.5
 gym[atari]
 h5py==2.10.0
 numpy==1.18.1
 opencv-python==4.2.0.32
 tensorboardX==2.0
-pytorch==1.5.0 -f https://download.pytorch.org/whl/torch_stable.html
 torchvision==0.6.0

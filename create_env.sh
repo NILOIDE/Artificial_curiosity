@@ -8,6 +8,8 @@ conda create --name AC python=3.7.2 cudatoolkit=10.1 -y
 conda activate AC
 
 pip install --user -r requirements.txt
+pip install pytorch==1.5 -f https://download.pytorch.org/whl/torch_stable.html
+
 # Install atari-py
 pip install --no-index -f https://github.com/Kojoley/atari-py/releases atari_py
 
