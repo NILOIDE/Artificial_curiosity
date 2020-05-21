@@ -29,7 +29,8 @@ def parse_args():
     parser.add_argument('--wm_lr', type=float, default=0.00001)
     parser.add_argument('--wm_tau', type=float, default=0.01)
     parser.add_argument('--wm_warmup_steps', type=int, default=0)
-    parser.add_argument('--intr_rew_norm_type', type=str, default='max_history')
+    parser.add_argument('--intr_rew_norm_type', type=str, default='whiten_history')  # {none, max, whiten, max_history, whiten_history}
+    parser.add_argument('--intr_rew_mean_n', help='Length of history in running mean', type=int, default=1000)
 
     parser.add_argument('--encoder_type', type=str, default="random", choices=["none", 'random', 'cont', 'idf', 'vae'])
     parser.add_argument('--decoder', type=bool, default=False)

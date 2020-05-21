@@ -1,5 +1,6 @@
 numpy==1.18.1
 h5py==2.10.0
 opencv-python==4.2.0.32
+tensorboard==2.2.1
 tensorboardX==2.0
 gym[atari]==0.17.2

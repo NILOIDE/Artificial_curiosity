@@ -10,6 +10,7 @@ from utils.visualise import Visualise
 from datetime import datetime
 import os
 from param_parse import parse_args
+
 np.set_printoptions(linewidth=400)
 np.seterr(all='raise')
 
@@ -37,32 +38,37 @@ def set_intr_rew_norm_type(type):
     return d
 
 
-def intr_reward_bookkeeping(r_int_t, history, intr_rew_norm):
-    history['int']['mean'].append(r_int_t.mean().item())
+def intr_reward_bookkeeping(r_int_t, history, intr_rew_norm, n):
+    def update_mean(new_value, d, n):
+        if len(d['list']) >= n:
+            d['running_mean'] -= d['list'][-n] / n
+        d['list'].append(new_value)
+        d['running_mean'] += new_value / n
+
+    update_mean(r_int_t.mean().item(), history['int']['mean'], n)
     if intr_rew_norm is not None:
         if intr_rew_norm['history']:
             if intr_rew_norm['max']:
-                r_min, r_max = r_int_t.min(), r_int_t.max()
-                history['int']['min'].append(r_min)
-                history['int']['max'].append(r_max)
+                update_mean(r_int_t.max().item(), history['int']['max'], n)
+                update_mean(r_int_t.min().item(), history['int']['min'], n)
             elif intr_rew_norm['whiten']:
-                history['int']['std'].append(r_int_t.std().item())
+                update_mean(r_int_t.std().item(), history['int']['std'], n)
 
 
 def normalize_rewards(r_int_t, history, norm_type):
     if norm_type['max']:
         if norm_type['history']:
-            r_min, r_max = np.min(history['int']['min'][-1000:]), np.max(history['int']['max'][-1000:])
+            r_min, r_max = history['int']['min']['running_mean']/n, history['int']['max']['running_mean']
         else:
             r_min, r_max = r_int_t.min(), r_int_t.max()
         r_range = r_max - r_min + 1e-10
         return (r_int_t - r_min) / r_range
     if norm_type['whiten']:
         if norm_type['history']:
-            r_mean = np.mean(history['int']['mean'][-100:])
-            r_std = np.mean(history['int']['std'][-100:]) + 1e-8 if len(history['int']['std']) > 1 else 1.0
+            r_mean = history['int']['mean']['running_mean']
+            r_std = (history['int']['std']['running_mean'] + 1e-8) if len(history['int']['std']['list']) > 1 else 1.0
         else:
-            r_mean = history['int']['mean'][-1]  # Mean is already calculated during book keeping
+            r_mean = history['int']['mean']['list'][-1]  # Mean is already calculated during book keeping
             r_std = r_int_t.std()
         return (r_int_t - r_mean) / r_std
 
@@ -118,6 +124,7 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
 
 def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
     print('Filling buffer')
+    eval_start = datetime.now()
     while len(buffer) < kwargs['buffer_size']:
         s_t = reset(env, obs_dim)
         done = False
@@ -128,6 +135,7 @@ def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
             if len(buffer) >= kwargs['buffer_size']:
                 break
             s_t = s_tp1
+    print(f'Buffer fill time: {(datetime.now() - eval_start).total_seconds()}s.')
 
 
 def warmup_wm(alg, wm, buffer, visualise, **kwargs):
@@ -145,11 +153,11 @@ def warmup_wm(alg, wm, buffer, visualise, **kwargs):
 
 def main(env, visualise, folder_name, **kwargs):
     buffer = DynamicsReplayBuffer(kwargs['buffer_size'])
-    obs_dim = (kwargs['frame_stack'] if kwargs['grayscale'] else 3*kwargs['frame_stack'], *kwargs['resize_dim'])
+    obs_dim = (kwargs['frame_stack'] if kwargs['grayscale'] else 3 * kwargs['frame_stack'], *kwargs['resize_dim'])
     # obs_dim = env.observation_space.sample().shape
     assert len(obs_dim) == 3, 'States should be image (C, W, H).'
     assert (obs_dim[0] == kwargs['frame_stack'] and kwargs['grayscale']) or \
-           (obs_dim[0] == 3*kwargs['frame_stack'] and not kwargs['grayscale']),\
+           (obs_dim[0] == 3 * kwargs['frame_stack'] and not kwargs['grayscale']), \
         f'Expected channels first. Received: {obs_dim}'
     a_dim = (env.action_space.n,)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -163,7 +171,10 @@ def main(env, visualise, folder_name, **kwargs):
     intr_rew_norm = set_intr_rew_norm_type(kwargs['intr_rew_norm_type'])
     ep_scores = {'DQN': [0.0], 'Mean intrinsic reward': [0.0]}
     start_time = datetime.now()
-    total_history = {'ext': [0.0], 'int': {'mean': [], 'std': [], 'min': [], 'max': []}, 'len': []}
+    total_history = {'ext': [0.0], 'len': [], 'int': {'mean': {'list': [], 'running_mean': 0.0},
+                                                      'std': {'list': [], 'running_mean': 0.0},
+                                                      'min': {'list': [], 'running_mean': 0.0},
+                                                      'max': {'list': [], 'running_mean': 0.0}}}
     fill_buffer(env, alg, buffer, obs_dim, **kwargs)
     visualise.eval_iteration_update(**evaluate(kwargs['env_name'], alg, wm, obs_dim))
     if kwargs['wm_warmup_steps'] > 0:
@@ -186,7 +197,7 @@ def main(env, visualise, folder_name, **kwargs):
                 batch = buffer.sample(kwargs['batch_size'])
                 obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
                 r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
-                intr_reward_bookkeeping(r_int_t, total_history, intr_rew_norm)
+                intr_reward_bookkeeping(r_int_t, total_history, intr_rew_norm, kwargs['intr_rew_mean_n'])
                 if intr_rew_norm is not None:
                     r_int_t = normalize_rewards(r_int_t, total_history, intr_rew_norm)
                 alg.train(obs_t_batch, a_t_batch, r_int_t, obs_tp1_batch, dones_batch)
@@ -196,7 +207,7 @@ def main(env, visualise, folder_name, **kwargs):
                     total_history['len'].append(total[1])
                 if alg.train_steps % kwargs['export_interval'] == 0:
                     ep_scores['DQN'].append(np.mean(total_history['ext'][-10:]))
-                    ep_scores['Mean intrinsic reward'].append(np.mean(total_history['int']['mean'][-1000:]))
+                    ep_scores['Mean intrinsic reward'].append(total_history['int']['mean']['running_mean'])
                     elapsed_time = (int((datetime.now() - start_time).total_seconds() // (60 * 60)),
                                     int((datetime.now() - start_time).total_seconds() % (60 * 60) // 60),
                                     int((datetime.now() - start_time).total_seconds() % 60))
@@ -206,14 +217,14 @@ def main(env, visualise, folder_name, **kwargs):
                           f'Eps: {alg.epsilon:.3f}',
                           'Time elapsed:', f'{elapsed_time[0]}:{elapsed_time[1]}:{elapsed_time[2]}')
 
-                    os.makedirs(folder_name + 'objects/', exist_ok=True)
-                    wm.save(path=f'{folder_name}objects/WM.pt')
-                    alg.save(path=f'{folder_name}objects/DQN.pt')
                     visualise.train_iteration_update(ext=ep_scores['DQN'][-1],
                                                      int=ep_scores['Mean intrinsic reward'][-1],
                                                      **{k: np.mean(i[-100:]) for k, i in wm.losses.items() if i != []},
                                                      alg_loss=np.mean(alg.losses[-100:]))
                 if alg.train_steps % kwargs['eval_interval'] == 0:
+                    os.makedirs(folder_name + 'objects/', exist_ok=True)
+                    wm.save(path=f'{folder_name}objects/WM.pt')
+                    alg.save(path=f'{folder_name}objects/DQN.pt')
                     visualise.eval_iteration_update(**evaluate(kwargs['env_name'], alg, wm, obs_dim))
 
     print('Environment closed.')
