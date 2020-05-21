@@ -58,7 +58,7 @@ def intr_reward_bookkeeping(r_int_t, history, intr_rew_norm, n):
 def normalize_rewards(r_int_t, history, norm_type):
     if norm_type['max']:
         if norm_type['history']:
-            r_min, r_max = history['int']['min']['running_mean']/n, history['int']['max']['running_mean']
+            r_min, r_max = history['int']['min']['running_mean'], history['int']['max']['running_mean']
         else:
             r_min, r_max = r_int_t.min(), r_int_t.max()
         r_range = r_max - r_min + 1e-10
