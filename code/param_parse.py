@@ -22,11 +22,11 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--alg_target_net_steps', type=int, default=1000)
     parser.add_argument('--alg_soft_target', type=bool, default=False)
-    parser.add_argument('--alg_lr', type=float, default=0.00001)
+    parser.add_argument('--alg_lr', type=float, default=1e-4)
     parser.add_argument('--z_dim', type=tuple, default=(512,))
     parser.add_argument('--wm_target_net_steps', type=int, default=1000)
     parser.add_argument('--wm_soft_target', type=bool, default=False)
-    parser.add_argument('--wm_lr', type=float, default=0.00001)
+    parser.add_argument('--wm_lr', type=float, default=1e-4)
     parser.add_argument('--wm_tau', type=float, default=0.01)
     parser.add_argument('--wm_warmup_steps', type=int, default=0)
     parser.add_argument('--intr_rew_norm_type', type=str, default='whiten_history')  # {none, max, whiten, max_history, whiten_history}
