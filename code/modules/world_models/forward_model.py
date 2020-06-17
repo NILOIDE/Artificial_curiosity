@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 
 class BaseForwardModel(nn.Module):
@@ -24,17 +25,14 @@ class BaseForwardModel(nn.Module):
 
     def apply_tensor_constraints(self, x, required_dim, name=''):
         # type: (torch.Tensor, tuple, str) -> torch.Tensor
-        # assert type(x) == torch.Tensor
-        # if len(tuple(x.shape)) != 1 and len(tuple(x.shape)) != 2:
-        #     if name != '':
-        #         name += ' '
-        #     raise ValueError("World model " + name + "input tensor should be 1D (single example) or 2D (batch).")
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x).to(dtype=torch.float32)
+        assert isinstance(x, torch.Tensor), type(x)
         if len(tuple(x.shape)) == 1:  # Add batch dimension to 1D tensor
-            if x.shape[0] == required_dim:
+            if x.shape[0] == required_dim[0]:
                 x = x.unsqueeze(0)
             else:
                 x = x.unsqueeze(1)
-        # if self.cuda:
         x = x.to(self.device)
         return x
 

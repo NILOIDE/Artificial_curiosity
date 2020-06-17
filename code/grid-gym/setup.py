@@ -16,7 +16,13 @@ setup(name='GridWorld25x25',
       packages=find_packages()
       )
 
-setup(name='GridWorld40x40',
+setup(name='GridWorld42x42',
+      version='0.1',
+      install_requires=['gym', 'numpy'],
+      packages=find_packages()
+      )
+
+setup(name='GridWorldSubspace50x50',
       version='0.1',
       install_requires=['gym', 'numpy'],
       packages=find_packages()
@@ -29,6 +35,12 @@ setup(name='GridWorldBox11x11',
       )
 
 setup(name='GridWorldSpiral28x28',
+      version='0.1',
+      install_requires=['gym', 'numpy'],
+      packages=find_packages()
+      )
+
+setup(name='GridWorldSpiral52x50',
       version='0.1',
       install_requires=['gym', 'numpy'],
       packages=find_packages()

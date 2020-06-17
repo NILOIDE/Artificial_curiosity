@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
-from modules.world_models.forward_model import ForwardModel_SigmaInputOutput, ForwardModel_SigmaOutputOnly, ForwardModel
-from modules.encoders.learned_encoders import Encoder_2D_Sigma, Encoder_1D_Sigma, Encoder_1D
+import numpy as np
+from modules.world_models.forward_model import ForwardModel
+from modules.encoders.learned_encoders import Encoder_2D_Sigma, Encoder_1D_Sigma, Encoder_1D, Encoder_2D
 from modules.encoders.random_encoder import RandomEncoder_1D, RandomEncoder_2D
 from modules.encoders.vae import VAE
 from modules.decoders.decoder import Decoder_2D, Decoder_2D_conv
@@ -27,7 +28,7 @@ class StochasticEncodedFM(nn.Module):
                                         device=self.device)  # type: ForwardModel
         # self.loss_func_stochastic = kl.kl_divergence
         self.loss_func = torch.nn.SmoothL1Loss(reduction='none').to(device)
-        self.steps = 0
+        self.train_steps = 0
 
     def forward(self, x_t, a_t, x_tp1, n=32):
         mu_t, log_sigma_t = self.encoder(x_t)
@@ -58,8 +59,8 @@ class StochasticEncodedFM(nn.Module):
             # print(log_sigma_tp1.min(), log_sigma_tp1.max(), log_sigma_tp1_prime.min(), log_sigma_tp1_prime.max())
             raise ValueError('Nan found in WM forward loss.')
 
-        self.steps += 1
-        if self.steps % self.target_steps == 0:
+        self.train_steps += 1
+        if self.train_steps % self.target_steps == 0:
             self.update_target()
         # self.soft_update_target(self.tau)
         return loss
@@ -117,28 +118,32 @@ class VAEFM(nn.Module):
                                           a_dim=self.a_dim,
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
-        self.steps = 0
+        self.train_steps = 0
 
-    def forward(self, x_t, a_t, x_tp1, **kwargs):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> [torch.Tensor, list, dict]
+    def forward(self, x_t, a_t, x_tp1, eval=False, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> [torch.Tensor, list, dict]
         """
         Forward pass of the world model. Returns processed intrinsic reward and keyworded
         loss components alongside the loss. Keyworded loss components are meant for bookkeeping
         and should be given as floats.
         """
-        vae_loss, *_ = self.vae(x_t)
+        # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
         z_t = self.vae.encode(x_t).detach()
-        z_tp1= self.vae.encode(x_tp1).detach()
+        z_tp1 = self.vae.encode(x_tp1).detach()
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
         loss_wm_vector = self.loss_func_distance(z_t + z_diff, z_tp1).mean(dim=1)
-        loss_wm = loss_wm_vector.mean(dim=0)
-        self.steps += 1
-        loss = vae_loss + loss_wm
-        loss_dict = {'wm_loss': loss.detach().mean().item(),
-                     'wm_trans_loss': loss_wm.detach().mean().item(),
-                     'wm_vae_loss': vae_loss.detach().mean().item()}
+        loss, loss_dict = None, None
+        # Section necessary only for training (Calculate VAE loss and overall loss)
+        if not eval:
+            vae_loss, *_ = self.vae(x_t)
+            loss_wm = loss_wm_vector.mean(dim=0)
+            self.train_steps += 1
+            loss = vae_loss + loss_wm
+            loss_dict = {'wm_loss': loss.detach().mean().item(),
+                         'wm_trans_loss': loss_wm.detach().mean().item(),
+                         'wm_vae_loss': vae_loss.detach().mean().item()}
         return loss_wm_vector.detach(), loss, loss_dict
 
     def encode(self, x):
@@ -170,24 +175,28 @@ class DeterministicCRandomEncodedFM(nn.Module):
                                           a_dim=self.a_dim,
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
-        self.steps = 0
+        self.trains_steps = 0
 
-    def forward(self, x_t, a_t, x_tp1, **kwargs):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> [torch.Tensor, list, dict]
+    def forward(self, x_t, a_t, x_tp1, eval=False, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> [torch.Tensor, list, dict]
         """
         Forward pass of the world model. Returns processed intrinsic reward and keyworded
         loss components alongside the loss. Keyworded loss components are meant for bookkeeping
         and should be given as floats.
         """
+        # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
         z_t = self.encoder(x_t)
         z_diff = self.forward_model(z_t, a_t)
         z_tp1 = self.encoder(x_tp1)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
         loss_vector = self.loss_func_distance(z_t + z_diff, z_tp1).mean(dim=1)
-        loss = loss_vector.mean(dim=0)
-        # loss = self.loss_func_distance(z_diff, z_tp1.detach()).mean(dim=1)
-        self.steps += 1
+        loss = None
+        # Section necessary only for training (Calculate overall loss)
+        if not eval:
+            loss = loss_vector.mean(dim=0)
+            # loss = self.loss_func_distance(z_diff, z_tp1.detach()).mean(dim=1)
+            self.trains_steps += 1
         return loss_vector.detach(), loss, {'wm_loss': loss.detach().item()}
 
     def create_encoder(self, input_dim, **kwargs):
@@ -224,6 +233,19 @@ class DeterministicContrastiveEncodedFM(nn.Module):
 
             self.hinge = hinge
 
+        def apply_tensor_constraints(self, x, required_dim, name=''):
+            # type: (torch.Tensor, tuple, str) -> torch.Tensor
+            if isinstance(x, np.ndarray):
+                x = torch.from_numpy(x).to(dtype=torch.float32)
+            assert isinstance(x, torch.Tensor), type(x)
+            if len(tuple(x.shape)) == 1:  # Add batch dimension to 1D tensor
+                if x.shape[0] == required_dim[0]:
+                    x = x.unsqueeze(0)
+                else:
+                    x = x.unsqueeze(1)
+            x = x.to(self.device)
+            return x
+
         def forward(self, output, neg_samples):
             # type: (torch.tensor, torch.tensor) -> torch.tensor
             """
@@ -232,7 +254,7 @@ class DeterministicContrastiveEncodedFM(nn.Module):
             Negative sample encodings have expected sahpe (batch*negsamples, zdim).
             Implementation from https://github.com/tkipf/c-swm/blob/master/modules.py.
             """
-            assert output.shape == neg_samples.shape[:-1]
+            assert output.shape == neg_samples.shape[:-1], f'Received: {tuple(output.shape)} {neg_samples.shape[:-1]}'
             output = output.unsqueeze(2).repeat((1, 1, neg_samples.shape[-1]))
             diff = output - neg_samples
             energy = diff.pow(2).sum(dim=1).sqrt()
@@ -264,34 +286,39 @@ class DeterministicContrastiveEncodedFM(nn.Module):
         self.loss_func_neg_sampling = self.HingeLoss(kwargs['hinge_value']).to(device)
         self.train_steps = 0
 
-    def forward(self, x_t, a_t, x_tp1, **kwargs):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> [torch.Tensor, list, dict]
+    def forward(self, x_t, a_t, x_tp1, eval=False, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> [torch.Tensor, list, dict]
+        if len(tuple(x_t.shape)) == 1:  # Add batch dimension to 1D tensor
+            x_t = x_t.unsqueeze(0)
+        if len(tuple(x_tp1.shape)) == 1:  # Add batch dimension to 1D tensor
+            x_tp1 = x_tp1.unsqueeze(0)
+        # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
         z_t = self.encoder(x_t)
-        z_diff = self.forward_model(z_t, a_t)
+        z_diff = self.forward_model(z_t.detach(), a_t)
         if self.target_encoder is not None:
             with torch.no_grad():
                 z_tp1 = self.target_encoder(x_tp1)
         else:
             z_tp1 = self.encoder(x_tp1)
         loss_trans = self.loss_func_distance(z_t + z_diff, z_tp1).mean(dim=1)
-
-        batch_size = x_t.shape[0]
-        if self.neg_samples > 0:
-            neg_samples = torch.from_numpy(kwargs['memories'].sample_states(self.neg_samples * batch_size)).to(
-                dtype=torch.float32)
-
-            neg_samples_z = self.encoder(neg_samples)
-
-            neg_samples_z = neg_samples_z.view((batch_size, -1, self.neg_samples))
-            loss_ns = self.loss_func_neg_sampling(z_t, neg_samples_z)
-        else:
-            loss_ns = torch.zeros((batch_size,))
-        loss = (loss_trans + loss_ns).mean()
-        self.train_steps += 1
-        self.update_target_encoder()
-        loss_dict = {'wm_loss': loss.detach().item(),
-                     'wm_trans_loss': loss_trans.detach().mean().item(),
-                     'wm_ns_loss': loss_ns.detach().mean().item()}
+        # Section necessary only for training (Calculate negative sampling error and overall loss)
+        loss_ns, loss, loss_dict = None, None, None
+        if not eval:
+            batch_size = x_t.shape[0]
+            if self.neg_samples > 0:
+                neg_samples = torch.from_numpy(kwargs['memories'].sample_states(self.neg_samples * batch_size)).to(
+                    dtype=torch.float32)
+                neg_samples_z = self.encoder(neg_samples)
+                neg_samples_z = neg_samples_z.view((batch_size, -1, self.neg_samples))
+                loss_ns = self.loss_func_neg_sampling(z_t, neg_samples_z)
+            else:
+                loss_ns = torch.zeros((batch_size,))
+            loss = (loss_trans + loss_ns).mean()
+            self.train_steps += 1
+            self.update_target_encoder()
+            loss_dict = {'wm_loss': loss.detach().item(),
+                         'wm_trans_loss': loss_trans.detach().mean().item(),
+                         'wm_ns_loss': loss_ns.detach().mean().item()}
         return loss_trans.detach(), loss, loss_dict
 
     def update_target_encoder(self):
@@ -313,7 +340,10 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                               batch_norm=kwargs['encoder_batchnorm'],
                               device=self.device)  # type: Encoder_1D
         else:
-            raise NotImplementedError
+            return Encoder_2D(x_dim=self.x_dim,
+                                    conv_layers=kwargs['conv_layers'],
+                                    z_dim=self.z_dim,
+                                    device=self.device)  # type: Encoder_2D
 
     def encode(self, x):
         return self.encoder(x)
@@ -338,6 +368,7 @@ class DeterministicInvDynFeatFM(nn.Module):
         def __init__(self, phi_dim, a_dim, hidden_dim=(256,), batch_norm=False, device='cpu'):
             # type: (tuple, tuple, tuple, bool, str) -> None
             """"
+            Network responsible for action prediction given s_t and s_tp1.
             Any number of arbitrary convolutional layers can used. A layer is represented using a dictionary.
             Only one fully-connected layer is used. The latent representation is assumed to be Gaussian.
             """
@@ -354,7 +385,7 @@ class DeterministicInvDynFeatFM(nn.Module):
                 self.layers.append(nn.ReLU())
                 h_dim_prev = h_dim
             self.layers.append(nn.Linear(hidden_dim[-1], self.a_dim[0]))
-            self.layers.append(nn.Softmax())
+            self.layers.append(nn.Softmax(dim=1))
             self.model = nn.Sequential(*self.layers).to(self.device)
 
         def forward(self, phi_t, phi_tp1):
@@ -386,29 +417,32 @@ class DeterministicInvDynFeatFM(nn.Module):
                                           a_dim=self.a_dim,
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
-        self.optimizer_wm = kwargs['wm_optimizer'](self.inverse_model.parameters(), lr=kwargs['wm_lr'])
         self.loss_func_inverse = nn.BCELoss().to(device)
         self.train_steps = 0
 
-    def forward(self, x_t, a_t, x_tp1, **kwargs):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> [torch.Tensor, torch.Tensor, dict]
+    def forward(self, x_t, a_t, x_tp1, eval=False, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> [torch.Tensor, torch.Tensor, dict]
+        # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
         phi_t = self.encoder(x_t)
         phi_tp1 = self.encoder(x_tp1)
-        a_t_pred = self.inverse_model(phi_t, phi_tp1)
-        inverse_loss = self.loss_func_inverse(a_t_pred, self.action_index_to_onehot(a_t))
-        phi_diff = self.forward_model(phi_t.detach(), a_t)
+        phi_diff = self.forward_model(phi_t, a_t)
         if self.target_encoder is not None:
             with torch.no_grad():
                 phi_t = self.target_encoder(x_t)
                 phi_tp1 = self.target_encoder(x_tp1)
-        loss_trans = self.loss_func_distance(phi_t.detach() + phi_diff, phi_tp1.detach()).mean(dim=1)
-        loss_trans_mean = loss_trans.mean()
-        self.train_steps += 1
-        self.update_target_encoder()
-        loss = loss_trans_mean + inverse_loss
-        loss_dict = {'wm_loss': loss.detach().item(),
-                     'wm_trans_loss': loss_trans_mean.detach().item(),
-                     'wm_inv_loss': inverse_loss.detach().item()}
+        loss_trans = self.loss_func_distance(phi_t + phi_diff, phi_tp1).mean(dim=1)
+        loss, loss_dict = None, None
+        # Section necessary only for training (Calculate inverse dynamics error and overall loss)
+        if not eval:
+            a_t_pred = self.inverse_model(phi_t, phi_tp1)
+            inverse_loss = self.loss_func_inverse(a_t_pred, self.action_index_to_onehot(a_t))
+            loss_trans_mean = loss_trans.mean()
+            self.train_steps += 1
+            self.update_target_encoder()
+            loss = loss_trans_mean + inverse_loss
+            loss_dict = {'wm_loss': loss.detach().item(),
+                         'wm_trans_loss': loss_trans_mean.detach().item(),
+                         'wm_inv_loss': inverse_loss.detach().item()}
         return loss_trans.detach(), loss, loss_dict
 
     def action_index_to_onehot(self, a_i):
@@ -449,7 +483,10 @@ class DeterministicInvDynFeatFM(nn.Module):
                               batch_norm=kwargs['encoder_batchnorm'],
                               device=self.device)  # type: Encoder_1D
         else:
-            raise NotImplementedError
+            return Encoder_2D(x_dim=self.x_dim,
+                              conv_layers=kwargs['conv_layers'],
+                              z_dim=self.z_dim,
+                              device=self.device)  # type: Encoder_2D
 
     def encode(self, x):
         return self.encoder(x)
@@ -495,6 +532,8 @@ class EncodedWorldModel:
             self.enc_is_vae = True
         else:
             raise NotImplementedError
+        print('WM Architecture:')
+        print(self.model)
         self.optimizer_wm = torch.optim.Adam(self.model.parameters(), lr=kwargs['wm_lr'])
         self.decoder, self.loss_func_d, self.optimizer_d = None, None, None
         if kwargs['decoder']:
@@ -512,17 +551,19 @@ class EncodedWorldModel:
 
     def forward(self, x_t, a_t, x_tp1, **kwargs):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
-        # x_t, x_tp1, a_t = x_t.to(self.device), x_tp1.to(self.device), a_t.to(self.device)
-        # assert x_t.shape == x_tp1.shape
         assert tuple(x_t.shape[-3:]) == self.x_dim, f'Received: {tuple(x_t.shape[1:])} {self.x_dim}'
         with torch.no_grad():
-            intr_reward, *_ = self.model.forward(x_t, a_t, x_tp1, **kwargs)
+            intr_reward, *_ = self.model.forward(x_t, a_t, x_tp1, eval=True, **kwargs)
         return intr_reward
 
     def train(self, x_t, a_t, x_tp1, **kwargs):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
         # assert x_t.shape == x_tp1.shape
-        assert tuple(x_t.shape[1:]) == self.x_dim, f'Received: {tuple(x_t.shape[1:])} and {self.x_dim}'
+        # assert tuple(x_t.shape[1:]) == self.x_dim, f'Received: {tuple(x_t.shape[1:])} and {self.x_dim}'
+        if len(x_t.shape) == 1:
+            x_t = x_t.unsqueeze(0)
+        if len(x_tp1.shape) == 1:
+            x_tp1 = x_tp1.unsqueeze(0)
         self.model.zero_grad()
         intr_reward, loss, loss_items = self.model.forward(x_t, a_t, x_tp1, **kwargs)
         loss.backward()
@@ -593,11 +634,15 @@ class WorldModelNoEncoder:
         self.device = device
         print('Observation space:', self.x_dim)
         self.model = ForwardModel(x_dim, a_dim, device=self.device)  # type: ForwardModel
+        print('WM Architecture:')
+        print(self.model)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=kwargs['wm_lr'])
-        # self.loss_func = torch.nn.MSELoss(reduction='none').to(self.device)
-        self.loss_func = torch.nn.SmoothL1Loss(reduction='none').to(self.device)
+        # self.optimizer = torch.optim.SGD(self.model.parameters(), lr=kwargs['wm_lr'])
+        self.loss_func = torch.nn.MSELoss(reduction='none').to(self.device)
+        # self.loss_func = torch.nn.SmoothL1Loss(reduction='none').to(self.device)
         # self.loss_func = torch.nn.BCELoss(reduction='none').to(self.device)
-        self.losses = {'wm_loss': [], 'decoder': []}
+        self.train_steps = 0
+        self.losses = {'wm_loss': [],  'wm_pred_error': []}
 
     def forward(self, x_t, a_t, x_tp1):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> torch.Tensor
@@ -605,6 +650,7 @@ class WorldModelNoEncoder:
         with torch.no_grad():
             x_tp1_prime = self.model(x_t, a_t)
             # x_tp1_prime = torch.nn.functional.softmax(x_tp1_prime, dim=1)
+            # x_tp1_prime = torch.nn.functional.sigmoid(x_tp1_prime)
             loss_vector = self.loss_func(x_tp1_prime, x_tp1).mean(dim=1)
         return loss_vector.detach()
 
@@ -613,19 +659,25 @@ class WorldModelNoEncoder:
         self.model.zero_grad()
         x_tp1_prime = self.model(x_t, a_t)
         # x_tp1_prime = torch.nn.functional.softmax(x_tp1_prime, dim=1)
+        # x_tp1_prime = torch.nn.functional.sigmoid(x_tp1_prime)
         loss_vector = self.loss_func(x_tp1_prime, x_tp1).mean(dim=1)
         loss = loss_vector.mean()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
         self.losses['wm_loss'].append(loss.item())
+        self.losses['wm_pred_error'].append((x_tp1 - x_tp1_prime).abs().sum(dim=1).mean().item())
+        self.train_steps += 1
         return loss_vector.detach()
 
     def next(self, x_t, a_t):
+        # type: (torch.Tensor, torch.Tensor) -> torch.Tensor
+        device = x_t.device
         with torch.no_grad():
             x_tp1 = self.model(x_t, a_t)
-            x_tp1 = torch.nn.functional.softmax(x_tp1, dim=1)
-        return x_tp1
+            # x_tp1 = torch.nn.functional.sigmoid(x_tp1)
+            # x_tp1 = torch.nn.functional.softmax(x_tp1, dim=1)
+        return x_tp1.to(device)
 
     def get_losses(self):
         return self.losses
@@ -641,3 +693,63 @@ class WorldModelNoEncoder:
         self.model = checkpoint['model']
         self.optimizer = checkpoint['optimizer_wm']
         self.losses['world_model'] = checkpoint['losses']
+
+
+class TabularWorldModel:
+    def __init__(self, obs_dim, a_dim, lr=0.001):
+        self.obs_dim = obs_dim
+        self.a_dim = a_dim
+        # self.predictions = torch.zeros((obs_dim[0], a_dim[0], obs_dim[0]))
+        self.predictions = {}
+        self.lr = 0.01
+        self.train_steps = 0
+        self.losses = {'wm_loss': []}
+
+    def train(self, s_t, a_t, s_tp1, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
+        assert len(s_t.shape) == 1
+        assert len(a_t.shape) == 1
+        if len(s_tp1.shape) == 2:
+            s_tp1 = s_tp1.squeeze(0)
+        assert len(s_tp1.shape) == 1
+        s_t_key = str(s_t.tolist())
+        # idx_t = s_t.argmax()
+        a_t = a_t[0]
+        # assert s_t[idx_t] == 1.0
+        if s_t_key not in self.predictions:
+            self.predictions[s_t_key] = [torch.zeros(self.obs_dim) for _ in range(self.a_dim[0])]
+        error = (s_tp1 - self.predictions[s_t_key][a_t])
+        r_int = error.pow(2.0).mean()
+        self.losses['wm_loss'].append(r_int)
+        self.predictions[s_t_key][a_t] += self.lr * error
+        self.train_steps += 1
+        return r_int
+
+    def forward(self, s_t, a_t, s_tp1):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> torch.Tensor
+        assert len(s_t.shape) == 1
+        assert len(a_t.shape) == 1
+        if len(s_tp1.shape) == 2:
+            s_tp1 = s_tp1.squeeze(0)
+        assert len(s_tp1.shape) == 1
+        s_t_key = str(s_t.tolist())
+        a_t = a_t[0]
+        if s_t_key not in self.predictions:
+            error = s_tp1
+        else:
+            error = (s_tp1 - self.predictions[s_t_key][a_t])
+        return error.pow(2.0).mean()
+
+    def next(self, s_t, a_t):
+        # type: (torch.Tensor, torch.Tensor) -> torch.Tensor
+        assert len(s_t.shape) == 1
+        assert len(a_t.shape) == 1
+        s_t_key = str(s_t.tolist())
+        a_t = a_t[0]
+        if s_t_key not in self.predictions:
+            return torch.zeros(self.obs_dim)
+        else:
+            return self.predictions[s_t_key][a_t]
+
+    def get_losses(self):
+        return self.losses

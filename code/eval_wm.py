@@ -4,7 +4,7 @@ np.set_printoptions(linewidth=400)
 import gym
 import grid_gym
 from grid_gym.envs.grid_world import *
-from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder
+from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder, TabularWorldModel
 import os
 import matplotlib.pyplot as plt
 plt.ioff()
@@ -20,12 +20,12 @@ def draw_heat_map(array, path, name):
     plt.close()
 
 
-def size_from_env_name(env_name: str) -> int:
+def size_from_env_name(env_name: str) -> tuple:
     i = 0
     for i in range(len(env_name) - 1, -1, -1):
         if env_name[i] == 'x':
             break
-    return int(env_name[i+1:-len('-v0')])
+    return (int(env_name[i+1-3:-len('-v0')-3]), int(env_name[i+1:-len('-v0')]))
 
 
 def get_env_instance(env_name):
@@ -33,50 +33,57 @@ def get_env_instance(env_name):
         env = GridWorldBox11x11()
     elif env_name == 'GridWorldSpiral28x28-v0':
         env = GridWorldSpiral28x28()
+    elif env_name == 'GridWorldSpiral52x50-v0':
+        env = GridWorldSpiral52x50()
     elif env_name == 'GridWorld10x10-v0':
         env = GridWorld10x10()
     elif env_name == 'GridWorld25x25-v0':
         env = GridWorld25x25()
-    elif env_name == 'GridWorld40x40-v0':
-        env = GridWorld40x40()
+    elif env_name == 'GridWorld42x42-v0':
+        env = GridWorld42x42()
+    elif env_name == 'GridWorldSubspace50x50-v0':
+        env = GridWorldSubspace50x50()
     else:
         raise ValueError('Wrong env_name.')
     return env
 
 
-def eval_wm(wm, folder_name, env_name, save_name=None):
+def eval_wm(wm, q_values, folder_name, env_name, save_name=None):
     size = size_from_env_name(env_name)
     env = get_env_instance(env_name)
     a_dim = env.action_space.n
-    prediction_error = np.zeros((size, size))
-    argmax_prediction_error = None
-    if not isinstance(wm, EncodedWorldModel):
-        argmax_prediction_error = np.zeros((size, size))
-    for i in range(size):
-        for j in range(size):
-            # if env.map[i, j] == 1:
-            #     continue
-            s = torch.zeros((size, size))
+    prediction_error = np.zeros(size)
+    # Map where Max Q-values will be plotted into
+    q_grid = np.zeros(size)
+    for i in range(size[0]):
+        for j in range(size[1]):
+            if hasattr(env, 'map') and env.map[i, j] == 1:
+                continue
+            s = torch.zeros(size)
             s[i, j] = 1
             for a in range(a_dim):
                 env.pos = [i, j]
-                ns = env.step(a)[0]#.reshape((size, size))
+                ns = env.step(a)[0]
+                # Map Q-values
+                q = q_values.forward(s.reshape((-1,)).numpy(), a)
+                if q > q_grid[i, j]:
+                    q_grid[i, j] = q
+                # Map pred error
                 if isinstance(wm, EncodedWorldModel):
-                    z_tp1_p = wm.next(s.reshape((1,-1)), torch.tensor([a]))
+                    z_tp1_p = wm.next(s.reshape((-1,)), torch.tensor([a]))
                     z_tp1 = wm.encode(torch.from_numpy(ns).type(torch.float))
                     prediction_error[i, j] += (z_tp1_p - z_tp1).abs().sum().item() / 2 / a_dim
                 else:
-                    pns = wm.next(s.reshape((1, -1,)), torch.tensor([a])).numpy()#.reshape((size, size))
-                    argmax_prediction_error[i, j] += np.sum(np.abs(ns - (pns == pns.max()))) / 2 / a_dim
+                    pns = wm.next(s.reshape((-1,)), torch.tensor([a])).numpy()
                     prediction_error[i, j] += np.sum(np.abs(ns - pns))/2/a_dim
     if save_name is not None:
         os.makedirs(folder_name + "/heat_maps/", exist_ok=True)
         draw_heat_map(prediction_error, folder_name + "/heat_maps/pred_error.png", 'prediction error')
-        draw_heat_map(argmax_prediction_error, folder_name + "/heat_maps/argmax_pred_error.png", 'argmax prediction error')
+        draw_heat_map(q_grid, folder_name + "/heat_maps/q_values.png", 'Q-values')
     walls_map = None
     if hasattr(env, 'map'):
         walls_map = env.map
-    return prediction_error, argmax_prediction_error, walls_map
+    return prediction_error, q_grid, walls_map
 
 
 if __name__ == "__main__":

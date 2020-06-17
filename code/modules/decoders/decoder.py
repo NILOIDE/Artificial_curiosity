@@ -55,7 +55,7 @@ class BaseDecoder(nn.Module):
 
 class Decoder_1D(BaseDecoder):
 
-    def __init__(self, z_dim, x_dim, hidden_dim=(64,), device='cpu'):
+    def __init__(self, z_dim, x_dim, hidden_dim=(512,), device='cpu'):
         # type: (tuple, tuple, tuple, str) -> None
         super().__init__(z_dim, x_dim, device)
         self.y_dim = x_dim

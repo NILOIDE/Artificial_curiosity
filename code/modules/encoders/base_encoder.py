@@ -32,8 +32,7 @@ class BaseEncoder(nn.Module):
             raise ValueError("Encoder input tensor should be "+str(le)+"D (single example) or "+str(le+1)+"D (batch).")
         if len(tuple(x.shape)) == 3:  # Add batch dimension to 1D tensor
             x = x.unsqueeze(0)
-        if self.cuda and not x.is_cuda:
-            x = x.to(self.device)
+        x = x.to(self.device)
         assert tuple(x.shape[-le:]) == self.x_dim
         return x
 

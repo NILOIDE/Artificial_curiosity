@@ -10,9 +10,14 @@ register(id='GridWorld25x25-v0',
          max_episode_steps=25*5
          )
 
-register(id='GridWorld40x40-v0',
-         entry_point='grid_gym.envs:GridWorld40x40',
-         max_episode_steps=40*5
+register(id='GridWorld42x42-v0',
+         entry_point='grid_gym.envs:GridWorld42x42',
+         max_episode_steps=42*2
+         )
+
+register(id='GridWorldSubspace50x50-v0',
+         entry_point='grid_gym.envs:GridWorldSubspace50x50',
+         max_episode_steps=50*2
          )
 
 register(id='GridWorldBox11x11-v0',
@@ -22,6 +27,11 @@ register(id='GridWorldBox11x11-v0',
 
 register(id='GridWorldSpiral28x28-v0',
          entry_point='grid_gym.envs:GridWorldSpiral28x28',
-         max_episode_steps=28*30
+         max_episode_steps=28*28
+         )
+
+register(id='GridWorldSpiral52x50-v0',
+         entry_point='grid_gym.envs:GridWorldSpiral52x50',
+         max_episode_steps=52*50
          )
 

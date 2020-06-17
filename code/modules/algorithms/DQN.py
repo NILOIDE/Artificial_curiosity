@@ -1,7 +1,6 @@
 import torch
-import torch.nn as nn
+import numpy as np
 import copy
-import random
 import math
 from modules.algorithms.network import Network1D, Network2D
 
@@ -48,7 +47,7 @@ class DQN:
         """
         if eps is None:
             eps = self.epsilon
-        if eval or random.random() >= eps:
+        if eval or torch.rand(1)[0] >= eps:
             with torch.no_grad():
                 return torch.argmax(self.network(s_t), dim=1)
         else:
@@ -123,3 +122,52 @@ class DQN:
         self.network = checkpoint[1]
         self.optimizer = checkpoint[2]
         self.losses = checkpoint[3]
+
+
+class TabularQlearning:
+    def __init__(self, obs_dim, a_dim, gamma, epsilon, lr=1.0):
+        self.obs_dim = obs_dim
+        self.a_dim = a_dim
+        self.q_values = {}
+        self.lr = lr
+        self.gamma = gamma
+        self.epsilon = epsilon
+        self.train_steps = 0
+        self.losses = []
+
+    def act(self, s_t, eval=False, eps=None):
+        if eps is None:
+            eps = self.epsilon
+        key = str(s_t.tolist())
+        # If state has never been visited before, take random action
+        if key in self.q_values and (eval or torch.rand(1).item() >= eps):
+            a_t = np.argmax(self.q_values[key])
+        else:
+            a_t = torch.randint(self.a_dim[0], (1,))[0]
+        a_t = int(a_t)
+        return a_t
+
+    def train(self, s_t, a_t, r_t, s_tp1):
+        # type: (np.ndarray, int, float, np.ndarray) -> None
+        s_t_key = str(s_t.tolist())
+        s_tp1_key = str(s_tp1.tolist())
+        if s_t_key not in self.q_values:
+            self.q_values[s_t_key] = [0.0 for _ in range(self.a_dim[0])]
+        q_t = self.q_values[s_t_key]
+        if s_tp1_key not in self.q_values:
+            self.q_values[s_tp1_key] = [0.0 for _ in range(self.a_dim[0])]
+        q_tp1 = self.q_values[s_tp1_key]
+        new_q = r_t + self.gamma * np.max(q_tp1)
+        self.losses.append(np.abs(new_q - q_t[a_t]))
+        q_t[a_t] += self.lr * (new_q - q_t[a_t])
+        self.train_steps += 1
+
+    def forward(self, s_t, a_t):
+        assert len(s_t.shape) == 1
+        key = str(s_t.tolist())
+        if key in self.q_values:
+            return self.q_values[key][a_t]
+        else:
+            return 0.0
+
+

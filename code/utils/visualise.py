@@ -1,7 +1,9 @@
 from tensorboardX import SummaryWriter
 import numpy as np
 import csv
-import os
+import sys
+
+np.set_printoptions(threshold=sys.maxsize)
 
 
 class Visualise:
@@ -34,7 +36,8 @@ class Visualise:
         else:
             raise AssertionError(f'Image must be Grayscale or RGB, but found channel dim was of size {img.shape[0]}')
         # return np.sqrt(img / (max + 1e-8))
-        return (img / (max + 1e-8))
+        new_img = img / max if max != 0.0 else img
+        return new_img
 
     def train_iteration_update(self, t=None, **kwargs):
         if t is None:
@@ -50,6 +53,22 @@ class Visualise:
             if 'wm_vae_loss' in kwargs:
                 self.writer.add_scalar("Training/WM VAE loss", kwargs['wm_vae_loss'], t)
             self.writer.add_scalar("Training/Policy loss", kwargs['alg_loss'], t)
+            if 'info' in kwargs:
+                if 'unique_states' in kwargs['info']:
+                    self.writer.add_scalar("Training/Unique states visited",
+                                           kwargs['info']['unique_states'], self.eval_id)
+                if 'unique_states_percent' in kwargs['info']:
+                    self.writer.add_scalar("Training/Percent of states visited",
+                                           kwargs['info']['unique_states_percent'], self.eval_id)
+                if 'kl' in kwargs['info']:
+                    self.writer.add_scalar("Training/Policy-Uniform KL",
+                                           kwargs['info']['kl'], self.eval_id)
+                if 'uniform_diff' in kwargs['info']:
+                    self.writer.add_scalar("Training/Policy-Uniform difference",
+                                           kwargs['info']['uniform_diff'], self.eval_id)
+                if 'uniform_diff_visited' in kwargs['info']:
+                    self.writer.add_scalar("Training/Policy-Uniform difference visited states",
+                                           kwargs['info']['uniform_diff_visited'], self.eval_id)
 
         self.writer.add_scalar("Training/Mean ep extrinsic rewards", kwargs['ext'], t)
         self.writer.add_scalar("Training/Mean step intrinsic rewards", kwargs['int'], t)
@@ -60,15 +79,21 @@ class Visualise:
         self.eval_id += self.eval_interval
 
     def eval_gridworld_iteration_update(self, **kwargs):
-        # self.writer.add_scalar("Evaluation/Mean ep extrinsic rewards", kwargs['ext'], self.eval_id)
-        # self.writer.add_scalar("Evaluation/Mean step intrinsic rewards", kwargs['int'], self.eval_id)
-        # self.writer.add_scalar("Evaluation/WM loss", kwargs['wm_loss'], self.eval_id)
-        # self.writer.add_scalar("Evaluation/Policy loss", kwargs['alg_loss'], self.eval_id)
-        density_map, pe_map, ape_map = None, None, None
+        density_map, pe_map, q_map = None, None, None
         if 'density_map' in kwargs:
             if len(kwargs['density_map'].shape) == 2:
                 kwargs['density_map'] = np.expand_dims(kwargs['density_map'], axis=0)
+            # Clipped
             density_map = self.normalize(kwargs['density_map'].clip(max=0.01))
+            if 'walls_map' in kwargs and kwargs['walls_map'] is not None:
+                density_map_rgb = np.concatenate((density_map,
+                                                  density_map + kwargs['walls_map'],
+                                                  density_map), axis=0)
+                self.writer.add_image("Evaluation/Visitation densities (clipped)", density_map_rgb, self.eval_id)
+            else:
+                self.writer.add_image("Evaluation/Visitation densities (clipped)", density_map, self.eval_id)
+            # Not clipped
+            density_map = self.normalize(kwargs['density_map'])
             if 'walls_map' in kwargs and kwargs['walls_map'] is not None:
                 density_map_rgb = np.concatenate((density_map,
                                                   density_map + kwargs['walls_map'],
@@ -99,23 +124,23 @@ class Visualise:
                                           np.zeros_like(density_map) + kwargs['walls_map'],
                                           density_map), axis=0)
                 self.writer.add_image("Evaluation/Density and Prediction error overlap", overlap, self.eval_id)
-        if 'ape_map' in kwargs and kwargs['ape_map'] is not None:
-            if len(kwargs['ape_map'].shape) == 2:
-                kwargs['ape_map'] = np.expand_dims(kwargs['ape_map'], axis=0)
+        if 'q_map' in kwargs and kwargs['q_map'] is not None:
+            if len(kwargs['q_map'].shape) == 2:
+                kwargs['q_map'] = np.expand_dims(kwargs['q_map'], axis=0)
             # Remove nodes that are walls
             if 'walls_map' in kwargs and kwargs['walls_map'] is not None:
-                kwargs['ape_map'] = kwargs['ape_map'] * (1 - kwargs['walls_map'])
+                kwargs['q_map'] = kwargs['q_map'] * (1 - kwargs['walls_map'])
             # Add scalar before normalising
-            self.writer.add_scalar("Evaluation/Argmax prediction error map sum", kwargs['ape_map'].sum(), self.eval_id)
-            ape_map = self.normalize(kwargs['ape_map'])
+            self.writer.add_scalar("Evaluation/Argmax Q-value map sum", kwargs['q_map'].sum(), self.eval_id)
+            q_map = self.normalize(kwargs['q_map'])
             # Display walls as red if map walls are given by converting error map to RGB
             if 'walls_map' in kwargs and kwargs['walls_map'] is not None:
-                ape_map_rgb = np.concatenate((ape_map,
-                                              ape_map + kwargs['walls_map'],
-                                              ape_map), axis=0)
-                self.writer.add_image("Evaluation/Argmax prediction error map", ape_map_rgb, self.eval_id)
+                q_map_rgb = np.concatenate((q_map,
+                                            q_map + kwargs['walls_map'],
+                                            q_map), axis=0)
+                self.writer.add_image("Evaluation/Argmax Q-value map", q_map_rgb, self.eval_id)
             else:
-                self.writer.add_image("Evaluation/Argmax prediction error map", ape_map, self.eval_id)
+                self.writer.add_image("Evaluation/Argmax Q-value map", q_map, self.eval_id)
         self.eval_id += self.eval_interval
 
     def eval_wm_warmup(self, t, **kwargs):
