@@ -136,7 +136,7 @@ class VAEFM(nn.Module):
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
-        loss_wm_vector = self.loss_func_distance(z_t + z_diff, z_tp1).mean(dim=1)
+        loss_wm_vector = self.loss_func_distance(z_t + z_diff, z_tp1).sum(dim=1)
         loss, loss_dict = None, None
         # Section necessary only for training (Calculate VAE loss and overall loss)
         if not eval:
@@ -200,7 +200,7 @@ class DeterministicCRandomEncodedFM(nn.Module):
         z_tp1 = self.encoder(x_tp1)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
-        loss_vector = self.loss_func_distance(z_t + z_diff, z_tp1).mean(dim=1)
+        loss_vector = self.loss_func_distance(z_t + z_diff, z_tp1).sum(dim=1)
         loss = None
         # Section necessary only for training (Calculate overall loss)
         if not eval:
@@ -539,7 +539,7 @@ class DeterministicInvDynFeatFM(nn.Module):
                 phi_t = self.target_encoder(x_t)
                 phi_tp1 = self.target_encoder(x_tp1)
         phi_diff = self.forward_model(phi_t, a_t)
-        loss_trans = self.loss_func_distance(phi_t + phi_diff, phi_tp1).mean(dim=1)
+        loss_trans = self.loss_func_distance(phi_t + phi_diff, phi_tp1).sum(dim=1)
         loss, loss_dict = None, None
         # Section necessary only for training (Calculate inverse dynamics error and overall loss)
         if not eval:
