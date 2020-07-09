@@ -2,7 +2,7 @@
 #SBATCH --time=3-00:00:00
 #SBATCH --mem=20000M
 #SBATCH --nodes=1
-#SBATCH --partition=gpu_short
+#SBATCH --partition=gpu
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=nil.stoltanso@student.uva.nl
 #SBATCH --output=name%j_idf.out
