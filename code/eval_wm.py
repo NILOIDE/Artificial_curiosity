@@ -49,6 +49,7 @@ def get_env_instance(env_name):
 
 
 def eval_wm(wm, q_values, folder_name, env_name, save_name=None):
+    print('Evaluating...')
     size = size_from_env_name(env_name)
     env = get_env_instance(env_name)
     a_dim = env.action_space.n

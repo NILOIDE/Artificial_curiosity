@@ -9,12 +9,11 @@ from utils.visualise import Visualise
 from datetime import datetime
 import matplotlib.pyplot as plt
 import os
-import shutil
 from param_parse import parse_args
 from eval_wm import eval_wm
 from modules.algorithms.DQN import TabularQlearning, DQN
 from modules.world_models.world_model import TabularWorldModel, WorldModelNoEncoder, EncodedWorldModel
-from modules.replay_buffers.replay_buffer import DynamicsReplayBuffer
+from modules.replay_buffers.replay_buffer_torch import DynamicsReplayBuffer
 import matplotlib.pyplot as plt
 
 
@@ -51,24 +50,22 @@ def draw_heat_map(visitation_count, t, folder_name):
 
 
 def warmup_enc_all_states(wm, env, start_time, buffer=None, device='cpu', **kwargs):
-
-    def check_neigh_dists(states, neighbours):
-        dist = []
-        for s, neigh in zip(states, neighbours):
-            s = torch.from_numpy(s).to(dtype=torch.float32, device=device).reshape((1, -1))
-            for n in neigh:  # States don't necessarily have 4 neighbors (if self is neighbour, it is omitted)
-                n = torch.from_numpy(n).to(dtype=torch.float32, device=device).reshape((1, -1))
-                dist.append((wm.encode(s) - wm.encode(n)).pow(2).sum().item())
-        dist_norm = np.array(dist) / np.mean(dist)
-        elapsed_time = (int((datetime.now() - start_time).total_seconds() // (60 * 60)),
-                        int((datetime.now() - start_time).total_seconds() % (60 * 60) // 60),
-                        int((datetime.now() - start_time).total_seconds() % 60))
-        print(np.mean(dist), np.std(dist), np.std(dist_norm), elapsed_time)
-        print(t, end='\r')
     states, neighbours = env.get_states_with_neighbours()
+    neigh_dist_variances = []
     t = -kwargs['wm_warmup_steps'] + 1
-
-    check_neigh_dists(states, neighbours)
+    dist = []
+    for s, neigh in zip(states, neighbours):
+        s = torch.from_numpy(s).to(dtype=torch.float32, device=device).reshape((1, -1))
+        for n in neigh:  # States don't necessarily have 4 neighbors (if self is neighbour, it is omitted)
+            n = torch.from_numpy(n).to(dtype=torch.float32, device=device).reshape((1, -1))
+            dist.append((wm.encode(s) - wm.encode(n)).pow(2).sum().item())
+    dist_norm = np.array(dist) / np.mean(dist)
+    neigh_dist_variances.append(np.std(dist_norm))
+    elapsed_time = (int((datetime.now() - start_time).total_seconds() // (60 * 60)),
+                    int((datetime.now() - start_time).total_seconds() % (60 * 60) // 60),
+                    int((datetime.now() - start_time).total_seconds() % 60))
+    print(np.mean(dist), np.std(dist), np.std(dist_norm), elapsed_time)
+    print(t, end='\r')
     if kwargs['wm_warmup_steps'] == 0:
         return
     print('Warming up world model...')
@@ -87,15 +84,25 @@ def warmup_enc_all_states(wm, env, start_time, buffer=None, device='cpu', **kwar
             t += 1
             if t >= 0:
                 break
-        check_neigh_dists(states, neighbours)
+
+        dist = []
+        for s, neigh in zip(states, neighbours):
+            s = torch.from_numpy(s).to(dtype=torch.float32, device=device).reshape((1, -1))
+            for n in neigh:  # States don't necessarily have 4 neighbors (if self is neighbour, it is omitted)
+                n = torch.from_numpy(n).to(dtype=torch.float32, device=device).reshape((1, -1))
+                dist.append((wm.model.encoder(s) - wm.model.encoder(n)).pow(2).sum().item())
+        dist_norm = np.array(dist) / np.mean(dist)
+        neigh_dist_variances.append(np.std(dist_norm))
+        elapsed_time = (int((datetime.now() - start_time).total_seconds() // (60 * 60)),
+                        int((datetime.now() - start_time).total_seconds() % (60 * 60) // 60),
+                        int((datetime.now() - start_time).total_seconds() % 60))
+        print(np.mean(dist), np.std(dist), np.std(dist_norm), elapsed_time)
+        print(t, end='\r')
         if t >= 0:
             break
 
 
 def main(env, visualise, folder_name, **kwargs):
-
-    shutil.copyfile(os.path.abspath(__file__), folder_name + 'test_ac_tabular_grid.py')
-    shutil.copyfile(os.path.dirname(__file__) + '/modules/world_models/world_model.py', folder_name + 'world_model.py')
     obs_dim = tuple(env.observation_space.sample().shape)
     assert len(obs_dim) == 1, f'States should be 1D vector. Received: {obs_dim}'
     a_dim = (env.action_space.n,)
@@ -105,7 +112,7 @@ def main(env, visualise, folder_name, **kwargs):
         wm = TabularWorldModel(obs_dim, a_dim, kwargs['wm_lr'], **kwargs)
         device = 'cpu'
     else:
-        device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if kwargs['encoder_type'] == 'none':
             wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
         else:
@@ -113,7 +120,7 @@ def main(env, visualise, folder_name, **kwargs):
     ep_scores = {'DQN': [0.0], 'Mean intrinsic reward': [0.0]}
     start_time = datetime.now()
     total_history = {'ext': [], 'int': []}
-    cont_buffer = DynamicsReplayBuffer(get_env_instance(kwargs['env_name']).history_len)
+    cont_buffer = DynamicsReplayBuffer(get_env_instance(kwargs['env_name']).history_len, device)
     cont_visited = False if not kwargs['gridworld_ns_pool'] == 'visited' else True
     cont_visited_uniform = False if not kwargs['gridworld_ns_pool'] == 'visited_uniform' else True
     if kwargs['encoder_type'] == 'cont' and kwargs['gridworld_ns_pool'] == 'uniform':
@@ -121,11 +128,11 @@ def main(env, visualise, folder_name, **kwargs):
         for s in get_env_instance(kwargs['env_name']).get_states():
             cont_buffer.add(s, None, None, None)
     wm.save(folder_name + 'saved_objects/')
-    if kwargs['encoder_type'] == 'cont':
-        # wm.load_encoder('results/GridWorld42x42-v0/2020-06-30_06-46-51-875645_-_fmhdim64_zdim64_uniform_2MkEncWarmupAllStates_01hinge_noEncTrain_cont/' + 'saved_objects/trained_encoder.pt')
-        # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
-        warmup_enc_all_states(wm, env, start_time, buffer=cont_buffer, device=device, **kwargs)
-        wm.save_encoder(folder_name + 'saved_objects/')
+    # if kwargs['encoder_type'] == 'cont':
+    #     wm.load_encoder('results/GridWorld42x42-v0/2020-06-30_06-46-51-875645_-_fmhdim64_zdim64_uniform_2MkEncWarmupAllStates_01hinge_noEncTrain_cont/' + 'saved_objects/trained_encoder.pt')
+    #     # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
+    #     warmup_enc_all_states(wm, env, start_time, buffer=cont_buffer, device=device, **kwargs)
+    #     wm.save_encoder(folder_name + 'saved_objects/')
     pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
     visualise.eval_gridworld_iteration_update(pe_map=pe_map,
                                               q_map=q_map,
@@ -137,7 +144,8 @@ def main(env, visualise, folder_name, **kwargs):
             a_t = alg.act(torch.from_numpy(s_t).to(dtype=torch.float32, device=device))
             s_tp1, r_t, done, info = env.step(a_t)
             if kwargs['encoder_type'] == 'cont' and cont_visited:
-                cont_buffer.add(s_t, None, None, None)
+                cont_buffer.add(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
+                                None, None, None)
             elif kwargs['encoder_type'] == 'cont' and cont_visited_uniform:
                 cont_buffer = torch.from_numpy(info['visited_states']).to(dtype=torch.float32)
             if alg.train_steps < kwargs['train_steps']:
@@ -150,6 +158,11 @@ def main(env, visualise, folder_name, **kwargs):
                 #                                   torch.from_numpy(s_tp1).to(dtype=torch.float32,
                 #                                                              device=device).unsqueeze(0),
                 #                                   **{'distance': info['distance']}).cpu().item()
+                # alg.train(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
+                #            torch.tensor([a_t]).to(device=device, dtype=torch.long),
+                #            r_int_t.unsqueeze(0),
+                #            torch.from_numpy(s_tp1).to(dtype=torch.float32, device=device).unsqueeze(0),
+                #            torch.tensor([False]).to(dtype=torch.int))
                 alg.train(s_t, a_t, r_int_t, s_tp1, False)
                 total_history['ext'].append(r_t)
                 total_history['int'].append(r_int_t)
@@ -208,7 +221,6 @@ def main(env, visualise, folder_name, **kwargs):
 
 
 if __name__ == "__main__":
-
     args = parse_args()
     args['env_name'] = 'GridWorld42x42-v0'
     np.random.seed(args['seed'])

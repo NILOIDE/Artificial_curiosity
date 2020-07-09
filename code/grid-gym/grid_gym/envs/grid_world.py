@@ -35,19 +35,21 @@ class SimpleGridWorld(gym.Env):
 
     def _create_info_dict(self):
         info = {'steps': self.t,
+                'distance': abs(self.pos[0] - self.start_pos[0]) + abs(self.pos[1] - self.start_pos[1]),
                 'counts': self.visitation_count,
                 'density': self.visitation_count / len(self.visitation_history)
                 if len(self.visitation_history) > 0 else self.visitation_count}
         # Count of unique states visited
         self.visited_states = (self.visitation_count > 0)
         visited_sum = self.visited_states.sum()
+        # info['visited_states'] = np.array(self.get_unique_visited_states())
         info['unique_states'] = visited_sum if visited_sum > 0.0 else 1.0
         info['uniform_diff'] = np.abs(self.uniform_prob_map - info['density']).sum()
         info['uniform_diff_visited'] = (np.abs(self.visited_states / info['unique_states']
                                                - info['density']) * self.visited_states).sum()
         return info
 
-    def step(self, a):
+    def step(self, a: int):
         self.t += 1
         info = self._create_info_dict()
         dim = (a - 1) // 2
@@ -55,11 +57,14 @@ class SimpleGridWorld(gym.Env):
         direction = (a - 1) % 2
         if a != 0:
             if direction == 0:
-                if self.pos[dim] > 0:
-                    self.pos[dim] -= 1
+            #     if self.pos[dim] > 0:
+            #         self.pos[dim] -= 1
+            # else:
+            #     if self.pos[dim] < self.size[dim] - 1:
+            #         self.pos[dim] += 1
+                self.pos[dim] = (self.pos[dim] - 1) % self.size[dim]
             else:
-                if self.pos[dim] < self.size[dim] - 1:
-                    self.pos[dim] += 1
+                self.pos[dim] = (self.pos[dim] + 1) % self.size[dim]
         s = self._index_to_grid(self.pos).reshape((-1,))
         self.last_state = s
         self.update_visitation_counts()
@@ -101,17 +106,37 @@ class SimpleGridWorld(gym.Env):
             states.append(s)
         return states
 
+    def get_states_with_neighbours(self):
+        states = []
+        neighbours = []
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                neigh = []
+                # If self is neighbour (due to wall), that neighbour is omitted
+                # if i > 0:
+                neigh.append(self._index_to_grid([(i - 1)%self.size[0], j]).reshape((-1,)))
+                # if i < self.size[0] - 1:
+                neigh.append(self._index_to_grid([(i + 1)%self.size[0], j]).reshape((-1,)))
+                # if j > 0:
+                neigh.append(self._index_to_grid([i, (j - 1)%self.size[1]]).reshape((-1,)))
+                # if j < self.size[1] - 1:
+                neigh.append(self._index_to_grid([i, (j + 1)%self.size[1]]).reshape((-1,)))
+                neighbours.append(np.array(neigh))
+                s = self._index_to_grid([i, j]).reshape((-1,))
+                states.append(s)
+        return states, neighbours
+
     def get_unique_visited_states(self):
         states = []
         size = np.prod(self.size)
         visited = self.visited_states.reshape((-1,))
         for i in range(int(size)):
-            if visited[i] == 1:
+            if visited[i] == 0:
                 continue
             s = np.zeros((size,))
             s[i] = 1
             states.append(s)
-        return states
+        return np.array(states)
 
     def get_visited_states(self):
         states = []

@@ -16,4 +16,4 @@ conda activate AC
 
 export LD_LIBRARY_PATH=/hpc/eb/Debian9/cuDNN/7.1-CUDA-8.0.44-GCCcore-5.4.0/lib64:$LD_LIBRARY_PATH
 cd ..
-srun python3 test_ac_dqn_2D.py --name=2Dcuriosity_LISA_normNone --intr_rew_norm_type=none
+srun python3 test_ac_dqn_2D.py --name=2Dcuriosity_LISA --zdim=512 --encoder_type='random' --wm_opt='adam' --wm_lr=1e-4 --seed=1

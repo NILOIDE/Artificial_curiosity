@@ -97,7 +97,7 @@ class Encoder_2D(BaseEncoder):
 
 class Encoder_1D_Sigma(BaseEncoder):
 
-    def __init__(self, x_dim, z_dim, hidden_dim=(512,), batch_norm=False, device='cpu'):
+    def __init__(self, x_dim, z_dim, hidden_dim=(64,), batch_norm=False, device='cpu'):
         # type: (tuple, tuple, tuple, bool, str) -> None
         """"
         Any number of arbitrary convolutional layers can used. A layer is represented using a dictionary.
@@ -131,7 +131,7 @@ class Encoder_1D_Sigma(BaseEncoder):
 
 class Encoder_1D(BaseEncoder):
 
-    def __init__(self, x_dim, z_dim, hidden_dim=(512,), batch_norm=True, device='cpu'):
+    def __init__(self, x_dim, z_dim, hidden_dim=(64,), batch_norm=True, device='cpu'):
         # type: (tuple, tuple, tuple, bool, str) -> None
         """"
         Any number of arbitrary convolutional layers can used. A layer is represented using a dictionary.

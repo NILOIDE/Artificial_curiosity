@@ -189,14 +189,15 @@ def main(env, visualise, folder_name, **kwargs):
                 visualise.train_iteration_update(ext=ep_scores['DQN'][-1],
                                                  int=ep_scores['Mean intrinsic reward'][-1],
                                                  **{k: np.mean(i[-100:]) for k, i in wm.losses.items() if i != []},
-                                                 alg_loss=np.mean(alg.losses[-100:]))
+                                                 alg_loss=np.mean(alg.losses[-100:]),
+                                                 info=info)
             if alg.train_steps % kwargs['eval_interval'] == 0:
                 if kwargs['env_name'][:9] == 'GridWorld':
                     draw_heat_map(info['density'], alg.train_steps, folder_name)
-                    pe_map, ape_map, walls_map = eval_wm(wm, folder_name, kwargs['env_name'])
+                    pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
                     visualise.eval_gridworld_iteration_update(density_map=info['density'],
                                                               pe_map=pe_map,
-                                                              ape_map=ape_map,
+                                                              q_map=q_map,
                                                               walls_map=walls_map)
     env.close()
     print('Environment closed.')
@@ -206,7 +207,7 @@ def main(env, visualise, folder_name, **kwargs):
 
 if __name__ == "__main__":
     args = parse_args()
-    args['env_name'] = 'GridWorldSpiral52x50-v0'
+    args['env_name'] = 'GridWorld42x42-v0'
     np.random.seed(args['seed'])
     torch.manual_seed(args['seed'])
     run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}_-_{args['name']}_{args['encoder_type']}/"

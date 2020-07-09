@@ -138,19 +138,6 @@ def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
     print(f'Buffer fill time: {(datetime.now() - eval_start).total_seconds()}s.')
 
 
-def warmup_wm(alg, wm, buffer, visualise, **kwargs):
-    """"
-    Used to warmup the environment visitation history.
-    """
-    print('Warming up world model...')
-    for i in range(-kwargs['wm_warmup_steps'] + 1, 0 + 1):
-        batch = buffer.sample(kwargs['batch_size'])
-        obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
-        r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
-        if alg.train_steps % kwargs['interval'] == 0:
-            visualise.eval_wm_warmup(i, **{k: np.mean(i[-100:]) for k, i in wm.losses.items() if i != []})
-
-
 def main(env, visualise, folder_name, **kwargs):
     buffer = DynamicsReplayBuffer(kwargs['buffer_size'])
     obs_dim = (kwargs['frame_stack'] if kwargs['grayscale'] else 3 * kwargs['frame_stack'], *kwargs['resize_dim'])
@@ -177,12 +164,9 @@ def main(env, visualise, folder_name, **kwargs):
                                                       'max': {'list': [], 'running_mean': 0.0}}}
     fill_buffer(env, alg, buffer, obs_dim, **kwargs)
     visualise.eval_iteration_update(**evaluate(kwargs['env_name'], alg, wm, obs_dim))
-    if kwargs['wm_warmup_steps'] > 0:
-        warmup_wm(alg, wm, buffer, visualise, **kwargs)
     print('Training...')
     while alg.train_steps < kwargs['train_steps']:
         s_t = reset(env, obs_dim)
-        # env.render('human')
         done = False
         total = [0, 0]
         while not done:
@@ -191,8 +175,6 @@ def main(env, visualise, folder_name, **kwargs):
             total[0] += r_t
             total[1] += 1
             buffer.add(s_t, a_t, s_tp1, done)
-            s_t = s_tp1
-            # env.render('human')
             if alg.train_steps < kwargs['train_steps']:
                 batch = buffer.sample(kwargs['batch_size'])
                 obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
@@ -222,11 +204,12 @@ def main(env, visualise, folder_name, **kwargs):
                                                      **{k: np.mean(i[-100:]) for k, i in wm.losses.items() if i != []},
                                                      alg_loss=np.mean(alg.losses[-100:]))
                 if alg.train_steps % kwargs['eval_interval'] == 0:
-                    os.makedirs(folder_name + 'objects/', exist_ok=True)
-                    wm.save(path=f'{folder_name}objects/WM.pt')
-                    alg.save(path=f'{folder_name}objects/DQN.pt')
+                    wm.save(f'{folder_name}saved_objects/')
+                    alg.save(f'{folder_name}saved_objects/')
                     visualise.eval_iteration_update(**evaluate(kwargs['env_name'], alg, wm, obs_dim))
+            s_t = s_tp1
 
+    env.close()
     print('Environment closed.')
     visualise.close()
     print('Tensorboard writer closed.')
@@ -236,7 +219,7 @@ if __name__ == "__main__":
     args = parse_args()
     np.random.seed(args['seed'])
     torch.manual_seed(args['seed'])
-    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}_-_{args['name']}_{args['encoder_type']}/"
+    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}_-_{args['name']}_{args['encoder_type']}_{args['seed']}/"
     print(run_name)
     environment = gym.make(args['env_name'])
     visualise = Visualise(run_name, **args)

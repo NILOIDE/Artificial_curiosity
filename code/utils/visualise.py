@@ -145,7 +145,8 @@ class Visualise:
 
     def eval_wm_warmup(self, t, **kwargs):
         assert t <= 0
-        self.writer.add_scalar("Training/WM loss", kwargs['wm_loss'], t)
+        if 'wm_loss' in kwargs:
+            self.writer.add_scalar("Training/WM loss", kwargs['wm_loss'], t)
         if 'wm_t_loss' in kwargs:
             self.writer.add_scalar("Training/WM translation loss", kwargs['wm_trans_loss'], t)
         if 'wm_ns_loss' in kwargs:

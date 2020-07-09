@@ -4,7 +4,7 @@ from modules.encoders.base_encoder import BaseEncoder
 
 
 class RandomEncoder_1D(BaseEncoder):
-    def __init__(self, x_dim, hidden_dim=(512,), z_dim=(20,), batch_norm=False, device='cpu'):
+    def __init__(self, x_dim, hidden_dim=(64,), z_dim=(64,), batch_norm=False, device='cpu'):
         # type: (tuple, tuple, tuple, bool, str) -> None
         """"
         This enconder has static weights as no gradients will be calculated. It provides static features.
@@ -35,7 +35,7 @@ class RandomEncoder_1D(BaseEncoder):
 
 
 class RandomEncoder_1D_sigma(BaseEncoder):
-    def __init__(self, x_dim, hidden_dim=(256,), z_dim=(20,), device='cpu'):
+    def __init__(self, x_dim, hidden_dim=(64,), z_dim=(20,), device='cpu'):
         # type: (tuple, tuple, tuple, str) -> None
         """"
         This enconder has static weights as no gradients will be calculated. It provides static features.

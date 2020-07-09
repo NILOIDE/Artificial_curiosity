@@ -3,7 +3,7 @@ import numpy as np
 import copy
 import math
 from modules.algorithms.network import Network1D, Network2D
-
+import os
 
 class DQN:
     def __init__(self, x_dim, a_dim, device='cpu', **kwargs):
@@ -91,6 +91,20 @@ class DQN:
         self.update_target_network()
         self.update_epsilon()
 
+    def forward(self, s_t, a_t):
+        # type: (torch.Tensor, torch.LongTensor) -> torch.Tensor
+        if isinstance(s_t, np.ndarray):
+            s_t = torch.from_numpy(s_t)
+        if isinstance(a_t, np.ndarray):
+            a_t = torch.from_numpy(a_t).to(dtype=torch.long)
+        if isinstance(a_t, int):
+            a_t = torch.tensor([a_t]).to(dtype=torch.long)
+        s_t = s_t.to(device=self.device)
+        a_t = a_t.to(device=self.device)
+        # TODO: This is not general, made to work for eval
+        q_t = self.network(s_t)[0][a_t]
+        return q_t.item()
+
     def update_target_network(self):
         if self.target_network is not None:
             if self.soft_target:
@@ -109,50 +123,60 @@ class DQN:
         else:
             self.epsilon = max(self.epsilon_min, math.exp(-self.train_steps/self.epsilon_tau))
 
-    def save(self, path='dqn.pt'):
+    def save(self, folder_path):
+        os.makedirs(folder_path, exist_ok=True)
         torch.save({'train_steps': self.train_steps,
                     'network': self.network,
                     'optimizer': self.optimizer,
                     'losses': self.losses
-                    }, path)
+                    }, folder_path + 'DQN_items.pt')
 
     def load(self, path):
         checkpoint = torch.load(path)
-        self.train_steps = checkpoint[0]
-        self.network = checkpoint[1]
-        self.optimizer = checkpoint[2]
-        self.losses = checkpoint[3]
+        self.train_steps = checkpoint['train_steps']
+        self.network = checkpoint['network']
+        self.optimizer = checkpoint['optimizer']
+        self.losses = checkpoint['losses']
 
 
 class TabularQlearning:
-    def __init__(self, obs_dim, a_dim, gamma, epsilon, lr=1.0):
+    def __init__(self, obs_dim, a_dim, gamma, epsilon, lr=0.001):
         self.obs_dim = obs_dim
         self.a_dim = a_dim
         self.q_values = {}
-        self.lr = lr
+        self.lr = 1.0
         self.gamma = gamma
         self.epsilon = epsilon
         self.train_steps = 0
         self.losses = []
 
     def act(self, s_t, eval=False, eps=None):
+        # type: (np.ndarray, bool, float) -> int
         if eps is None:
             eps = self.epsilon
         key = str(s_t.tolist())
-        # If state has never been visited before, take random action
-        if key in self.q_values and (eval or torch.rand(1).item() >= eps):
+        if key not in self.q_values:  # If state has never been visited before, take random action
+            a_t = torch.randint(self.a_dim[0] - 1, (1,))[0] + 1
+            return int(a_t)
+        if eval:
             a_t = np.argmax(self.q_values[key])
+            return int(a_t)
+        if torch.rand(1).item() >= eps:
+            a_t = np.argmax(self.q_values[key])
+            return int(a_t)
         else:
-            a_t = torch.randint(self.a_dim[0], (1,))[0]
-        a_t = int(a_t)
-        return a_t
+            a_t = torch.randint(self.a_dim[0] -1, (1,))[0]+1
+            return int(a_t)
 
-    def train(self, s_t, a_t, r_t, s_tp1):
-        # type: (np.ndarray, int, float, np.ndarray) -> None
+    def train(self, s_t, a_t, r_t, s_tp1, d_t):
+        # type: (np.ndarray, int, float, np.ndarray, bool) -> None
         s_t_key = str(s_t.tolist())
         s_tp1_key = str(s_tp1.tolist())
         if s_t_key not in self.q_values:
             self.q_values[s_t_key] = [0.0 for _ in range(self.a_dim[0])]
+        # print('--------')
+        # print(np.argmax(s_t))
+        # print(self.q_values[s_t_key])
         q_t = self.q_values[s_t_key]
         if s_tp1_key not in self.q_values:
             self.q_values[s_tp1_key] = [0.0 for _ in range(self.a_dim[0])]
@@ -160,9 +184,11 @@ class TabularQlearning:
         new_q = r_t + self.gamma * np.max(q_tp1)
         self.losses.append(np.abs(new_q - q_t[a_t]))
         q_t[a_t] += self.lr * (new_q - q_t[a_t])
+        # print(self.q_values[s_t_key], a_t)
         self.train_steps += 1
 
     def forward(self, s_t, a_t):
+        # type: (np.ndarray, int) -> float
         assert len(s_t.shape) == 1
         key = str(s_t.tolist())
         if key in self.q_values:
@@ -170,4 +196,13 @@ class TabularQlearning:
         else:
             return 0.0
 
+    def save(self, path='saved_objects/dqn_items.pt'):
+        torch.save({'train_steps': self.train_steps,
+                    'losses': self.losses
+                    }, path)
+
+    def load(self, path):
+        checkpoint = torch.load(path)
+        self.train_steps = checkpoint['train_steps']
+        self.losses = checkpoint['losses']
 
