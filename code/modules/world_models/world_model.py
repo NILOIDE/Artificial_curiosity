@@ -118,6 +118,7 @@ class VAEFM(nn.Module):
         self.vae = VAE(x_dim, device=device, **kwargs)  # type: VAE
         self.forward_model = ForwardModel(x_dim=kwargs['z_dim'],
                                           a_dim=self.a_dim,
+                                          hidden_dim=kwargs['wm_h_dim'],
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
         self.train_steps = 0
@@ -181,6 +182,7 @@ class DeterministicCRandomEncodedFM(nn.Module):
         self.encoder = self.create_encoder(len(x_dim), **kwargs)
         self.forward_model = ForwardModel(x_dim=self.encoder.get_z_dim(),
                                           a_dim=self.a_dim,
+                                          hidden_dim=kwargs['wm_h_dim'],
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
         self.trains_steps = 0
@@ -297,6 +299,7 @@ class DeterministicContrastiveEncodedFM(nn.Module):
         self.neg_samples = kwargs['neg_samples']
         self.forward_model = ForwardModel(x_dim=self.encoder.get_z_dim(),
                                           a_dim=self.a_dim,
+                                          hidden_dim=kwargs['wm_h_dim'],
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
         self.loss_func_neg_sampling = self.HingeLoss(kwargs['hinge_value']).to(device)
@@ -520,6 +523,7 @@ class DeterministicInvDynFeatFM(nn.Module):
                                                device=device)
         self.forward_model = ForwardModel(x_dim=self.encoder.get_z_dim(),
                                           a_dim=self.a_dim,
+                                          hidden_dim=kwargs['wm_h_dim'],
                                           device=self.device)  # type: ForwardModel
         self.loss_func_distance = nn.MSELoss(reduction='none').to(device)
         self.loss_func_inverse = nn.BCELoss().to(device)
@@ -645,7 +649,12 @@ class EncodedWorldModel:
             raise NotImplementedError
         print('WM Architecture:')
         print(self.model)
-        self.optimizer_wm = torch.optim.SGD(self.model.parameters(), lr=kwargs['wm_lr'])
+        if kwargs['wm_opt'] == 'sgd':
+            self.optimizer_wm = torch.optim.SGD(self.model.parameters(), lr=kwargs['wm_lr'])
+        elif kwargs['wm_opt'] == 'adam':
+            self.optimizer_wm = torch.optim.Adam(self.model.parameters(), lr=kwargs['wm_lr'])
+        else:
+            raise NameError('What optimizer??')
         self.decoder, self.loss_func_d, self.optimizer_d = None, None, None
         if kwargs['decoder']:
             if len(x_dim) != 1 and not self.enc_is_vae:
@@ -805,7 +814,7 @@ class WorldModelNoEncoder:
         self.a_dim = a_dim
         self.device = device
         print('Observation space:', self.x_dim)
-        self.model = ForwardModel(x_dim, a_dim, device=self.device)  # type: ForwardModel
+        self.model = ForwardModel(x_dim, a_dim, hidden_dim=kwargs['wm_h_dim'], device=self.device)  # type: ForwardModel
         print('WM Architecture:')
         print(self.model)
         if kwargs['wm_opt'] == 'sgd':

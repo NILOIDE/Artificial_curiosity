@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
-    parser.add_argument('--buffer_size', type=int, default=int(5e4))
+    parser.add_argument('--buffer_size', type=int, default=int(5e3))
     parser.add_argument('--train_steps', type=int, default=int(2e6))
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--eps_static', type=bool, default=True)
@@ -24,7 +24,8 @@ def parse_args():
     parser.add_argument('--alg_soft_target', type=bool, default=False)
     parser.add_argument('--alg_lr', type=float, default=1e-4)
     parser.add_argument('--z_dim', type=tuple, default=(64,))
-    parser.add_argument('--wm_opt', type=str, default='sgd', choices=['sgd', 'adam'])
+    parser.add_argument('--wm_h_dim', type=tuple, default=(64,))
+    parser.add_argument('--wm_opt', type=str, default='adam', choices=['sgd', 'adam'])
     parser.add_argument('--wm_target_net_steps', type=int, default=0)
     parser.add_argument('--wm_soft_target', type=bool, default=False)
     parser.add_argument('--wm_lr', type=float, default=1e-2)
@@ -46,7 +47,7 @@ def parse_args():
 
     parser.add_argument('--neg_samples', type=int, default=100)
     parser.add_argument('--hinge_value', type=float, default=0.1)
-    parser.add_argument('--idf_inverse_model_hdim', type=tuple, default=(64,))
+    parser.add_argument('--idf_inverse_hdim', type=tuple, default=(64,))
 
     parser.add_argument('--gridworld_ns_pool', type=str, default="uniform", choices=['visited', 'uniform', 'visited_uniform'])
 

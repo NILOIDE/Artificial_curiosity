@@ -38,9 +38,9 @@ class BaseDecoder(nn.Module):
         return z
 
     def determine_upconv_dims(self, conv_layers: list) -> list:
-        prev_channels = self.x_dim[2]
-        prev_dim_x = self.x_dim[0]
-        prev_dim_y = self.x_dim[1]
+        prev_channels = self.x_dim[0]
+        prev_dim_x = self.x_dim[1]
+        prev_dim_y = self.x_dim[2]
         dims = [(prev_channels, prev_dim_x, prev_dim_y)]
         for layer in conv_layers:
             prev_channels = layer['channel_num']
