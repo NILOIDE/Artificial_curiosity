@@ -195,16 +195,17 @@ class DeterministicCRandomEncodedFM(nn.Module):
         and should be given as floats.
         """
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        z_t = self.encoder(x_t)
+        with torch.no_grad():
+            z_t = self.encoder(x_t)
+            z_tp1 = self.encoder(x_tp1)
         z_diff = self.forward_model(z_t, a_t)
-        z_tp1 = self.encoder(x_tp1)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
         loss_vector = self.loss_func_distance(z_t + z_diff, z_tp1).sum(dim=1)
         loss, loss_dict = None, None
         # Section necessary only for training (Calculate overall loss)
         if not eval:
-            loss = loss_vector.mean(dim=0)
+            loss = loss_vector.mean()
             # loss = self.loss_func_distance(z_diff, z_tp1.detach()).mean(dim=1)
             self.trains_steps += 1
             loss_dict = {'wm_loss': loss.detach().item()}
@@ -538,13 +539,13 @@ class DeterministicInvDynFeatFM(nn.Module):
     def forward(self, x_t, a_t, x_tp1, eval=False, **kwargs):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> [torch.Tensor, torch.Tensor, dict]
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        phi_t = self.encoder(x_t)
-        phi_tp1 = self.encoder(x_tp1)
+        phi_t = self.encoder(x_t).detach()
+        phi_tp1 = self.encoder(x_tp1).detach()
         if self.target_encoder is not None:
             with torch.no_grad():
                 phi_t = self.target_encoder(x_t)
                 phi_tp1 = self.target_encoder(x_tp1)
-        phi_diff = self.forward_model(phi_t, a_t)
+        phi_diff = self.forward_model(phi_t.detach(), a_t)
         loss_trans = self.loss_func_distance(phi_t + phi_diff, phi_tp1).sum(dim=1)
         loss, loss_dict = None, None
         # Section necessary only for training (Calculate inverse dynamics error and overall loss)
@@ -571,7 +572,7 @@ class DeterministicInvDynFeatFM(nn.Module):
         if len(tuple(a_i.shape)) == 1:
             if batch_size == self.a_dim:  # If there is no batch dim and entire vector belongs to 1 single action
                 a_i = a_i.unsqueeze(0)
-            else:
+            else:  # This should only happen in the case where there is a vector of actions and a_dim == 1
                 a_i = a_i.unsqueeze(1)
         # Create 1-hot
         one_hot = torch.zeros((batch_size, self.a_dim[0]), device=self.device, dtype=torch.float32)
@@ -830,8 +831,6 @@ class WorldModelNoEncoder:
         else:
             raise NameError('What optimizer??')
         self.loss_func = torch.nn.MSELoss(reduction='none').to(self.device)
-        # self.loss_func = torch.nn.SmoothL1Loss(reduction='none').to(self.device)
-        # self.loss_func = torch.nn.BCELoss(reduction='none').to(self.device)
         self.train_steps = 0
         self.losses = {'wm_loss': [], 'wm_pred_error': []}
         self._its_a_gridworld_bois = kwargs['env_name'][:9] == 'GridWorld'
@@ -843,14 +842,14 @@ class WorldModelNoEncoder:
         x_t, x_tp1, a_t = x_t.to(self.device), x_tp1.to(self.device), a_t.to(self.device)
         with torch.no_grad():
             x_tp1_prime = self.model(x_t, a_t)
-            loss_vector = self.loss_func(x_tp1_prime, x_tp1).sum(dim=1)
+            loss_vector = self.loss_func(x_t + x_tp1_prime, x_tp1).sum(dim=1)
         return loss_vector.detach()
 
     def train(self, x_t, a_t, x_tp1, store_loss=True, **kwargs):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> torch.Tensor
         self.model.zero_grad()
         x_tp1_prime = self.model(x_t, a_t)
-        loss_vector = self.loss_func(x_tp1_prime, x_tp1).mean(dim=1)
+        loss_vector = self.loss_func(x_t + x_tp1_prime, x_tp1).sum(dim=1)
         intr_reward = loss_vector.detach()
         loss = loss_vector.mean()
         loss.backward()
@@ -861,7 +860,7 @@ class WorldModelNoEncoder:
             if key in self.state_wise_loss_diff:
                 self.state_wise_loss_diff[key]['list'].append(
                     abs(self.state_wise_loss[key]['list'][-1] - intr_reward.item()))
-            new_d = self.loss_func(self.model.forward(x_t, a_t), x_tp1).mean(dim=1).detach()
+            new_d = self.loss_func(self.model.forward(x_t, a_t), x_tp1).sum(dim=1).detach()
             if key in self.state_wise_loss:
                 self.state_wise_loss[key]['list'].append(new_d.item())
             else:
