@@ -131,8 +131,8 @@ class VAEFM(nn.Module):
         and should be given as floats.
         """
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        z_t = self.vae.encode(x_t).detach()
-        z_tp1 = self.vae.encode(x_tp1).detach()
+        z_t = self.vae.encoder(x_t)#.detach()
+        z_tp1 = self.vae.encoder(x_tp1)#.detach()
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
@@ -141,12 +141,12 @@ class VAEFM(nn.Module):
         # Section necessary only for training (Calculate VAE loss and overall loss)
         if not eval:
             vae_loss, *_ = self.vae(x_t)
-            loss_wm = loss_wm_vector.mean(dim=0)
+            loss_wm = loss_wm_vector.mean()
             self.train_steps += 1
             loss = vae_loss + loss_wm
             loss_dict = {'wm_loss': loss.detach().mean().item(),
-                         'wm_trans_loss': loss_wm.detach().mean().item(),
-                         'wm_vae_loss': vae_loss.detach().mean().item()}
+                         'wm_trans_loss': loss_wm.detach().item(),
+                         'wm_vae_loss': vae_loss.detach().item()}
         return loss_wm_vector.detach(), loss, loss_dict
 
     def encode(self, x):
