@@ -201,13 +201,14 @@ class DeterministicCRandomEncodedFM(nn.Module):
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
         loss_vector = self.loss_func_distance(z_t + z_diff, z_tp1).sum(dim=1)
-        loss = None
+        loss, loss_dict = None, None
         # Section necessary only for training (Calculate overall loss)
         if not eval:
             loss = loss_vector.mean(dim=0)
             # loss = self.loss_func_distance(z_diff, z_tp1.detach()).mean(dim=1)
             self.trains_steps += 1
-        return loss_vector.detach(), loss, {'wm_loss': loss.detach().item()}
+            loss_dict = {'wm_loss': loss.detach().item()}
+        return loss_vector.detach(), loss, loss_dict
 
     def create_encoder(self, input_dim, **kwargs):
         if input_dim == 1:
@@ -330,7 +331,7 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                     # neg_samples = kwargs['memories'].sample_states(self.neg_samples)
                 else:
                     neg_samples = kwargs['memories']
-                loss_ns = self.calculate_neg_example_loss(neg_samples, z_t=z_t)
+                loss_ns = self.calculate_contrastive_loss(neg_samples, z_t=z_t, pos_examples_z=z_tp1)
                 loss = (loss_trans + loss_ns).mean()
             else:
                 loss = loss_trans.mean()
@@ -357,8 +358,8 @@ class DeterministicContrastiveEncodedFM(nn.Module):
         neg_samples_z = neg_samples_z.repeat((z_t.shape[0], 1, 1))
         return self.loss_func_neg_sampling(z_t, neg_samples_z).mean()
 
-    def calculate_contrastive_loss(self, neg_examples, x_t=None, z_t=None, pos_examples=None):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]
+    def calculate_contrastive_loss(self, neg_examples, x_t=None, z_t=None, pos_examples=None, pos_examples_z=None):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]
         """
         Negative and Positive examples are converted into a (batch, examples, zdim) structure in this function.
         """
@@ -376,16 +377,21 @@ class DeterministicContrastiveEncodedFM(nn.Module):
         neg_samples_z = neg_samples_z.unsqueeze(0)
         neg_samples_z = neg_samples_z.repeat((z_t.shape[0], 1, 1))
         loss = self.loss_func_neg_sampling(z_t, neg_samples_z)
+        # Positive examples below
         if pos_examples is not None:
+            assert pos_examples_z is None, "Either x_t or z_t should be None."
             if len(tuple(pos_examples.shape)) == 1:  # Add batch dimension to 1D tensor
                 pos_examples = pos_examples.unsqueeze(0)
             pos_examples_z = self.encoder(pos_examples)
-            if len(tuple(pos_examples.shape)) == 2:
+        if pos_examples_z is not None:
+            if len(tuple(pos_examples_z.shape)) == 1:  # Add batch dimension to 1D tensor
+                pos_examples_z = pos_examples_z.unsqueeze(0)
+            if len(tuple(pos_examples_z.shape)) == 2:
                 if z_t.shape[0] == 1:
                     pos_examples_z = pos_examples_z.unsqueeze(0)
                 else:
                     # This accepts 2D pos example tensors where every z_t has the same amount of pos examples
-                    assert pos_examples.shape[0] % z_t.shape[0] == 0,\
+                    assert pos_examples_z.shape[0] % z_t.shape[0] == 0,\
                         "There should be an equal amount of pos examples per z."
                     pos_examples_z = pos_examples_z.view((z_t.shape[0], pos_examples_z.shape[0]//z_t.shape[0], -1))
             z_t_expanded = z_t.unsqueeze(1).repeat((1, pos_examples_z.shape[1], 1))
