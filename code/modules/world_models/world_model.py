@@ -131,8 +131,8 @@ class VAEFM(nn.Module):
         and should be given as floats.
         """
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        z_t = self.vae.encoder(x_t)#.detach()
-        z_tp1 = self.vae.encoder(x_tp1)#.detach()
+        z_t = self.vae.encoder(x_t).detach()
+        z_tp1 = self.vae.encoder(x_tp1).detach()
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
@@ -539,14 +539,14 @@ class DeterministicInvDynFeatFM(nn.Module):
     def forward(self, x_t, a_t, x_tp1, eval=False, **kwargs):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> [torch.Tensor, torch.Tensor, dict]
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        phi_t = self.encoder(x_t).detach()
-        phi_tp1 = self.encoder(x_tp1).detach()
+        phi_t = self.encoder(x_t)
+        phi_tp1 = self.encoder(x_tp1)
         if self.target_encoder is not None:
             with torch.no_grad():
                 phi_t = self.target_encoder(x_t)
                 phi_tp1 = self.target_encoder(x_tp1)
         phi_diff = self.forward_model(phi_t.detach(), a_t)
-        loss_trans = self.loss_func_distance(phi_t + phi_diff, phi_tp1).sum(dim=1)
+        loss_trans = self.loss_func_distance(phi_t.detach() + phi_diff, phi_tp1.detach()).sum(dim=1)
         loss, loss_dict = None, None
         # Section necessary only for training (Calculate inverse dynamics error and overall loss)
         if not eval:

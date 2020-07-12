@@ -95,12 +95,12 @@ def warmup_enc_all_states(wm, env, start_time, buffer=None, device='cpu', **kwar
 def main(env, visualise, folder_name, **kwargs):
 
     shutil.copyfile(os.path.abspath(__file__), folder_name + 'test_ac_tabular_grid.py')
-    shutil.copyfile(os.path.dirname(os.path.realpath(__file__)) + '/modules/world_models/world_model.py', folder_name + 'world_model.py')
+    shutil.copyfile(os.path.dirname(os.path.realpath(__file__)) + '/modules/world_models/world_model.py',
+                    folder_name + 'world_model.py')
     obs_dim = tuple(env.observation_space.sample().shape)
     assert len(obs_dim) == 1, f'States should be 1D vector. Received: {obs_dim}'
     a_dim = (env.action_space.n,)
     alg = TabularQlearning(obs_dim, a_dim, kwargs['gamma'], kwargs['eps_min'])
-    # alg = DQN(obs_dim, a_dim, **kwargs)
     if kwargs['encoder_type'] == 'tab':
         wm = TabularWorldModel(obs_dim, a_dim, kwargs['wm_lr'], **kwargs)
         device = 'cpu'

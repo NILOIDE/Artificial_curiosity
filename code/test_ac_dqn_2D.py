@@ -10,6 +10,7 @@ from utils.visualise import Visualise
 from datetime import datetime
 import os
 from param_parse import parse_args
+import shutil
 
 np.set_printoptions(linewidth=400)
 np.seterr(all='raise')
@@ -139,6 +140,9 @@ def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
 
 
 def main(env, visualise, folder_name, **kwargs):
+    shutil.copyfile(os.path.abspath(__file__), folder_name + 'test_ac_tabular_grid.py')
+    shutil.copyfile(os.path.dirname(os.path.realpath(__file__)) + '/modules/world_models/world_model.py',
+                    folder_name + 'world_model.py')
     buffer = DynamicsReplayBuffer(kwargs['buffer_size'])
     obs_dim = (kwargs['frame_stack'] if kwargs['grayscale'] else 3 * kwargs['frame_stack'], *kwargs['resize_dim'])
     # obs_dim = env.observation_space.sample().shape

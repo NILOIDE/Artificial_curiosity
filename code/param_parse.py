@@ -8,7 +8,7 @@ def parse_args():
 
     parser.add_argument('--env_name', type=str, default='Breakout-v0')
     parser.add_argument('--save_dir', type=str, default='final_results/')
-    parser.add_argument('--name', type=str, default='zdim16_hdim16_eps02_envLoopAround_lr-3_test')
+    parser.add_argument('--name', type=str, default='zdim16_hdim64_eps01_envLoopAround_lr-3_test')
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
@@ -17,15 +17,15 @@ def parse_args():
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--eps_static', type=bool, default=True)
     parser.add_argument('--eps_half', help='Epsilon at half t in exponential epsilon decay', type=float, default=0.08)
-    parser.add_argument('--eps_min', help='Minimum clipped eps', type=float, default=.2)
+    parser.add_argument('--eps_min', help='Minimum clipped eps', type=float, default=.1)
 
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--alg_target_net_steps', type=int, default=1000)
     parser.add_argument('--alg_soft_target', type=bool, default=False)
     parser.add_argument('--alg_lr', type=float, default=1e-4)
     parser.add_argument('--z_dim', type=str, default='(16,)')
-    parser.add_argument('--wm_h_dim', type=str, default='(16,)')
-    parser.add_argument('--wm_opt', type=str, default='sgd', choices=['sgd', 'adam'])
+    parser.add_argument('--wm_h_dim', type=str, default='(64,)')
+    parser.add_argument('--wm_opt', type=str, default='sgd', choices=['adam', 'adam'])
     parser.add_argument('--wm_target_net_steps', type=int, default=0)
     parser.add_argument('--wm_soft_target', type=bool, default=False)
     parser.add_argument('--wm_lr', type=float, default=1e-3)
@@ -35,7 +35,7 @@ def parse_args():
                         choices=['none', 'max', 'whiten', 'max_history', 'whiten_history'])
     parser.add_argument('--intr_rew_mean_n', help='Length of history in running mean', type=int, default=1000)
 
-    parser.add_argument('--encoder_type', type=str, default="none",
+    parser.add_argument('--encoder_type', type=str, default="random",
                         choices=['tab', 'none', 'random', 'cont', 'idf', 'vae'])
     parser.add_argument('--decoder', type=bool, default=False)
     parser.add_argument('--resize_dim', type=str, default='(84, 84)')
@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument('--stochastic_latent', type=bool, default=False)
     parser.add_argument('--encoder_batchnorm', type=bool, default=False)
 
-    parser.add_argument('--neg_samples', type=int, default=100)
+    parser.add_argument('--neg_samples', type=int, default=10)
     parser.add_argument('--hinge_value', type=float, default=0.1)
     parser.add_argument('--idf_inverse_hdim', type=str, default='(64,)')
 
