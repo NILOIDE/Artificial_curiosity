@@ -122,7 +122,7 @@ def main(env, visualise, folder_name, **kwargs):
             cont_buffer.add(s, None, None, None)
     wm.save(folder_name + 'saved_objects/')
     if kwargs['encoder_type'] == 'cont':
-        # wm.load_encoder('results/GridWorld42x42-v0/2020-06-30_06-46-51-875645_-_fmhdim64_zdim64_uniform_2MkEncWarmupAllStates_01hinge_noEncTrain_cont/' + 'saved_objects/trained_encoder.pt')
+        # wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-12_14-15-38-185893_-_zdim16_hdim64_eps01_envLoopAround_encPretrain2M_noEncTrainlr-3_test_cont_1/' + 'saved_objects/trained_encoder.pt')
         # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
         warmup_enc_all_states(wm, env, start_time, buffer=cont_buffer, device=device, **kwargs)
         wm.save_encoder(folder_name + 'saved_objects/')

@@ -131,8 +131,8 @@ class VAEFM(nn.Module):
         and should be given as floats.
         """
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        z_t = self.vae.encoder(x_t).detach()
-        z_tp1 = self.vae.encoder(x_tp1).detach()
+        z_t, _ = self.vae.encoder(x_t).detach()
+        z_tp1, _ = self.vae.encoder(x_tp1).detach()
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
@@ -397,7 +397,6 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                     pos_examples_z = pos_examples_z.view((z_t.shape[0], pos_examples_z.shape[0]//z_t.shape[0], -1))
             z_t_expanded = z_t.unsqueeze(1).repeat((1, pos_examples_z.shape[1], 1))
             pos_loss = (z_t_expanded - pos_examples_z).pow(2).sum(dim=2).mean(dim=1)
-            # pos_loss = ((z_t_expanded - pos_examples_z).pow(2).sum(dim=2) - 0.001).clamp(min=0.0).mean(dim=1)
             loss += pos_loss
         return loss.mean()
 
@@ -720,7 +719,6 @@ class EncodedWorldModel:
             negative_examples = torch.from_numpy(negative_examples.sample_states(
                 self.model.neg_samples)).to(dtype=torch.float32, device=self.device)
         self.model.zero_grad()
-        # loss = self.model.calculate_neg_example_loss(negative_examples, x_t=x_t)
         loss = self.model.calculate_contrastive_loss(negative_examples, x_t=x_t, pos_examples=positive_examples)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
@@ -812,6 +810,167 @@ class EncodedWorldModel:
         self.losses = checkpoint['losses']
         self.state_wise_loss = checkpoint['state_wise_loss']
         self.state_wise_loss_diff = checkpoint['state_wise_loss_diff']
+
+
+class WorldModelContrastive:
+    def __init__(self, x_dim, a_dim, device='cpu', **kwargs):
+        # type: (tuple, tuple, str, dict) -> None
+        self.x_dim = x_dim
+        self.a_dim = a_dim
+        self.device = device
+        print('Observation space:', self.x_dim)
+        assert kwargs['encoder_type'] == 'cont', 'Unknown encoder type.'
+        self.model = DeterministicContrastiveEncodedFM(x_dim, a_dim, device=self.device,
+                                                               **kwargs)  # type: DeterministicContrastiveEncodedFM
+        print('WM Architecture:')
+        print(self.model)
+        if kwargs['wm_opt'] == 'sgd':
+            self.optimizer_wm = torch.optim.SGD(self.model.parameters(), lr=kwargs['wm_lr'])
+            self.optimizer_enc = torch.optim.SGD(self.model.encoder.parameters(), lr=0.01)
+        elif kwargs['wm_opt'] == 'adam':
+            self.optimizer_wm = torch.optim.Adam(self.model.parameters(), lr=kwargs['wm_lr'])
+            self.optimizer_enc = torch.optim.Adam(self.model.encoder.parameters(), lr=0.01)
+        else:
+            raise NameError('What optimizer??')
+        self.losses = {'wm_loss': [], 'wm_trans_loss': [], 'wm_ns_loss': []}
+        self._its_a_gridworld_bois = kwargs['env_name'][:9] == 'GridWorld'
+        self.state_wise_loss = {} if self._its_a_gridworld_bois else None
+        self.state_wise_loss_diff = {} if self._its_a_gridworld_bois else None
+
+    def forward(self, x_t, a_t, x_tp1, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
+        assert tuple(x_t.shape[-3:]) == self.x_dim, f'Received: {tuple(x_t.shape[1:])} {self.x_dim}'
+        with torch.no_grad():
+            intr_reward, *_ = self.model.forward(x_t, a_t, x_tp1, eval=True, **kwargs)
+        return intr_reward
+
+    def train(self, x_t, a_t, x_tp1, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
+        if len(x_t.shape) == 1:
+            x_t = x_t.unsqueeze(0)
+        if len(x_tp1.shape) == 1:
+            x_tp1 = x_tp1.unsqueeze(0)
+        self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
+        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
+        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
+        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
+        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
+        int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
+        return int_reward
+
+    def train_contrastive_encoder(self, x_t, negative_examples, positive_examples=None):
+        # type: (torch.Tensor, object, torch.Tensor) -> None
+        if isinstance(negative_examples, np.ndarray):
+            negative_examples = torch.from_numpy(negative_examples).to(dtype=torch.float32, device=self.device)
+        if not isinstance(negative_examples, torch.Tensor):
+            negative_examples = torch.from_numpy(negative_examples.sample_states(
+                self.model.neg_samples)).to(dtype=torch.float32, device=self.device)
+        self.model.zero_grad()
+        loss = self.model.calculate_contrastive_loss(negative_examples, x_t=x_t, pos_examples=positive_examples)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        self.optimizer_enc.step()
+        self.losses['wm_ns_loss'].append(loss.item())
+
+    def train_contrastive_enc_and_fm(self, x_t, a_t, x_tp1, store_loss=True, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> torch.Tensor
+        if len(x_t.shape) == 1:
+            x_t = x_t.unsqueeze(0)
+        if len(x_tp1.shape) == 1:
+            x_tp1 = x_tp1.unsqueeze(0)
+        self.model.zero_grad()
+        intr_reward, loss, loss_items = self.model.forward(x_t, a_t, x_tp1, **kwargs)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        self.optimizer_wm.step()
+        for key in loss_items:
+            self.losses[key].append(loss_items[key])
+        if self._its_a_gridworld_bois and store_loss:
+            key = str(x_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
+            if key in self.state_wise_loss_diff:
+                self.state_wise_loss_diff[key]['list'].append(
+                    abs(self.state_wise_loss[key]['list'][-1] - intr_reward.item()))
+            new_d, *_ = self.model.forward(x_t, a_t, x_tp1, **kwargs)
+            if key in self.state_wise_loss:
+                self.state_wise_loss[key]['list'].append(new_d)
+            else:
+                self.state_wise_loss[key] = {'d': kwargs['distance'], 'list': [new_d]}
+                self.state_wise_loss_diff[key] = {'d': kwargs['distance'], 'list': []}
+        return intr_reward
+
+    def train_contrastive_fm(self, x_t, a_t, x_tp1, store_loss=True, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> torch.Tensor
+        self.model.zero_grad()
+        intr_reward, loss, loss_items = self.model.forward_fm_only(x_t, a_t, x_tp1)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        self.optimizer_wm.step()
+        for key in loss_items:
+            self.losses[key].append(loss_items[key])
+        if self._its_a_gridworld_bois and store_loss:
+            key = str(x_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
+            if key in self.state_wise_loss_diff:
+                self.state_wise_loss_diff[key]['list'].append(
+                    abs(self.state_wise_loss[key]['list'][-1] - intr_reward.item()))
+            new_d, *_ = self.model.forward_fm_only(x_t, a_t, x_tp1)
+            if key in self.state_wise_loss:
+                self.state_wise_loss[key]['list'].append(new_d)
+            else:
+                self.state_wise_loss[key] = {'d': kwargs['distance'], 'list': [new_d]}
+                self.state_wise_loss_diff[key] = {'d': kwargs['distance'], 'list': []}
+        return intr_reward
+
+    def encode(self, x):
+        with torch.no_grad():
+            return self.model.encode(x).detach()
+
+    def decode(self, z):
+        with torch.no_grad():
+            return self.decoder(z).detach()
+
+    def next_z_from_z(self, z_t, a_t):
+        return self.model.next_z_from_z(z_t, a_t).detach()
+
+    def next(self, x_t, a_t):
+        return self.model.next(x_t, a_t).detach()
+
+    def predict_next_obs(self, x_t, a_t):
+        with torch.no_grad():
+            mu_tp1, _ = self.model.next_z_from_x(x_t, a_t)
+            x_tp1 = self.decode(mu_tp1).detach()
+            return x_tp1
+
+    def get_losses(self):
+        return self.losses
+
+    def save(self, folder_path):
+        os.makedirs(folder_path, exist_ok=True)
+        torch.save({'model': self.model,
+                    'optimizer_wm': self.optimizer_wm,
+                    'losses': self.losses,
+                    'decoder': self.decoder,
+                    'optimizer_d': self.optimizer_d,
+                    'state_wise_loss': self.state_wise_loss,
+                    'state_wise_loss_diff': self.state_wise_loss_diff
+                    }, folder_path + 'wm_items.pt')
+
+    def save_encoder(self, folder_path):
+        os.makedirs(folder_path, exist_ok=True)
+        self.model.save_encoder(folder_path + 'trained_encoder.pt')
+
+    def load_encoder(self, path):
+        self.model.load_encoder(path)
+
+    def load(self, path):
+        checkpoint = torch.load(path)
+        self.model = checkpoint['model']
+        self.optimizer_wm = checkpoint['optimizer_wm']
+        self.decoder = checkpoint['decoder']
+        self.optimizer_d = checkpoint['optimizer_d']
+        self.losses = checkpoint['losses']
+        self.state_wise_loss = checkpoint['state_wise_loss']
+        self.state_wise_loss_diff = checkpoint['state_wise_loss_diff']
+
 
 
 class WorldModelNoEncoder:
