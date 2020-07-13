@@ -131,8 +131,8 @@ class VAEFM(nn.Module):
         and should be given as floats.
         """
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        z_t, _ = self.vae.encoder(x_t).detach()
-        z_tp1, _ = self.vae.encoder(x_tp1).detach()
+        z_t = self.vae.encode(x_t)
+        z_tp1 = self.vae.encode(x_tp1)
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad

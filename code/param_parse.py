@@ -35,7 +35,7 @@ def parse_args():
                         choices=['none', 'max', 'whiten', 'max_history', 'whiten_history'])
     parser.add_argument('--intr_rew_mean_n', help='Length of history in running mean', type=int, default=1000)
 
-    parser.add_argument('--encoder_type', type=str, default="cont",
+    parser.add_argument('--encoder_type', type=str, default="vae",
                         choices=['tab', 'none', 'random', 'cont', 'idf', 'vae'])
     parser.add_argument('--decoder', type=bool, default=False)
     parser.add_argument('--resize_dim', type=str, default='(84, 84)')
