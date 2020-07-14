@@ -2,9 +2,9 @@
 import torch
 import gym
 import numpy as np
-from modules.replay_buffers.replay_buffer import DynamicsReplayBuffer, ReplayBuffer
+from modules.replay_buffers.replay_buffer import DynamicsReplayBuffer
 from modules.algorithms.DQN import DQN
-from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder
+from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder, WorldModelContrastive
 from utils.utils import standardize_state, transition_to_torch_no_r
 from utils.visualise import Visualise
 from datetime import datetime
@@ -154,11 +154,12 @@ def main(env, visualise, folder_name, **kwargs):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('Device:', device)
     alg = DQN(obs_dim, a_dim, device=device, **kwargs)
-    if kwargs['encoder_type'] == 'none':
-        raise NotImplementedError
-        wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
-    else:
+    if kwargs['encoder_type'] == 'cont':
+        wm = WorldModelContrastive(obs_dim, a_dim, device=device, **kwargs)
+    elif kwargs['encoder_type'] in {'vae', 'idf', 'random'}:
         wm = EncodedWorldModel(obs_dim, a_dim, device=device, **kwargs)
+    else:
+        raise NotImplementedError
     intr_rew_norm = set_intr_rew_norm_type(kwargs['intr_rew_norm_type'])
     ep_scores = {'DQN': [0.0], 'Mean intrinsic reward': [0.0]}
     start_time = datetime.now()
