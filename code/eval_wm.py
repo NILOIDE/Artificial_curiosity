@@ -4,7 +4,7 @@ np.set_printoptions(linewidth=400)
 import gym
 import grid_gym
 from grid_gym.envs.grid_world import *
-from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder, TabularWorldModel
+from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder, TabularWorldModel, WorldModelContrastive
 import os
 import matplotlib.pyplot as plt
 plt.ioff()
@@ -70,7 +70,7 @@ def eval_wm(wm, q_values, folder_name, env_name, save_name=None):
                 if q > q_grid[i, j]:
                     q_grid[i, j] = q
                 # Map pred error
-                if isinstance(wm, EncodedWorldModel):
+                if isinstance(wm, EncodedWorldModel) or isinstance(wm, WorldModelContrastive):
                     z_tp1_p = wm.next(s.reshape((-1,)), torch.tensor([a]))
                     z_tp1 = wm.encode(torch.from_numpy(ns).type(torch.float))
                     prediction_error[i, j] += (z_tp1_p - z_tp1).abs().sum().item() / 2 / a_dim

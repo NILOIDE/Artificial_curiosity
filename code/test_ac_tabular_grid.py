@@ -13,7 +13,7 @@ import shutil
 from param_parse import parse_args
 from eval_wm import eval_wm
 from modules.algorithms.DQN import TabularQlearning, DQN
-from modules.world_models.world_model import TabularWorldModel, WorldModelNoEncoder, EncodedWorldModel
+from modules.world_models.world_model import TabularWorldModel, WorldModelNoEncoder, EncodedWorldModel, WorldModelContrastive
 from modules.replay_buffers.replay_buffer import DynamicsReplayBuffer
 import matplotlib.pyplot as plt
 
@@ -108,6 +108,8 @@ def main(env, visualise, folder_name, **kwargs):
         device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
         if kwargs['encoder_type'] == 'none':
             wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
+        elif kwargs['encoder_type'] == 'cont':
+            wm = WorldModelContrastive(obs_dim, a_dim, device=device, **kwargs)
         else:
             wm = EncodedWorldModel(obs_dim, a_dim, device=device, **args)
     ep_scores = {'DQN': [0.0], 'Mean intrinsic reward': [0.0]}
@@ -141,15 +143,17 @@ def main(env, visualise, folder_name, **kwargs):
             elif kwargs['encoder_type'] == 'cont' and cont_visited_uniform:
                 cont_buffer = torch.from_numpy(info['visited_states']).to(dtype=torch.float32)
             if alg.train_steps < kwargs['train_steps']:
+                # extra_args = {'memories': cont_buffer, 'distance': info['distance']}
+                extra_args = {'memories': cont_buffer}
                 r_int_t = wm.train(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
                                    torch.tensor([a_t], device=device),
                                    torch.from_numpy(s_tp1).to(dtype=torch.float32, device=device).unsqueeze(0),
-                                   **{'memories': cont_buffer, 'distance': info['distance']}).cpu().item()
+                                   **extra_args).cpu().item()
                 # r_int_t = wm.train_contrastive_fm(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
                 #                                   torch.tensor([a_t], device=device),
                 #                                   torch.from_numpy(s_tp1).to(dtype=torch.float32,
                 #                                                              device=device).unsqueeze(0),
-                #                                   **{'distance': info['distance']}).cpu().item()
+                #                                   **extra_args).cpu().item()
                 alg.train(s_t, a_t, r_int_t, s_tp1, False)
                 total_history['ext'].append(r_t)
                 total_history['int'].append(r_int_t)
@@ -210,7 +214,7 @@ def main(env, visualise, folder_name, **kwargs):
 if __name__ == "__main__":
 
     args = parse_args()
-    args['env_name'] = 'GridWorld42x42-v0'
+    args['env_name'] = 'GridWorldSpiral28x28-v0'
     np.random.seed(args['seed'])
     random.seed(args['seed'])
     torch.manual_seed(args['seed'])

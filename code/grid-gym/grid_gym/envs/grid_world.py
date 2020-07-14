@@ -358,6 +358,26 @@ class GridWorldLoad(SimpleGridWorld):
                 states.append(s)
         return states
 
+    def get_states_with_neighbours(self):
+        states = []
+        neighbours = []
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                neigh = []
+                # If self is neighbour (due to wall), that neighbour is omitted
+                if i > 0 and not self.map[i - 1, j]:
+                    neigh.append(self._index_to_grid([i - 1, j]).reshape((-1,)))
+                if i < self.size[0] - 1 and not self.map[i + 1, j]:
+                    neigh.append(self._index_to_grid([i + 1, j]).reshape((-1,)))
+                if j > 0 and not self.map[i, j - 1]:
+                    neigh.append(self._index_to_grid([i, j - 1]).reshape((-1,)))
+                if j < self.size[1] - 1 and not self.map[i, j + 1]:
+                    neigh.append(self._index_to_grid([i, j + 1]).reshape((-1,)))
+                neighbours.append(np.array(neigh))
+                s = self._index_to_grid([i, j]).reshape((-1,))
+                states.append(s)
+        return states, neighbours
+
 
 class GridWorld10x10(SimpleGridWorld):
     def __init__(self):
