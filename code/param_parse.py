@@ -8,7 +8,7 @@ def parse_args():
 
     parser.add_argument('--env_name', type=str, default='Breakout-v0')
     parser.add_argument('--save_dir', type=str, default='final_results/')
-    parser.add_argument('--name', type=str, default='zdim32_hdim64_eps01_ns100_hinge01_uniform_lr-3_test')
+    parser.add_argument('--name', type=str, default='zdim32_hdim64_eps01_ns10_hinge01_preTrain5M_EncTrain_uniform_enclr-2')
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument('--stochastic_latent', type=bool, default=False)
     parser.add_argument('--encoder_batchnorm', type=bool, default=False)
 
-    parser.add_argument('--neg_samples', type=int, default=100)
+    parser.add_argument('--neg_samples', type=int, default=10)
     parser.add_argument('--hinge_value', type=float, default=0.1)
     parser.add_argument('--idf_inverse_hdim', type=str, default='(64,)')
 

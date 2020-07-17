@@ -41,6 +41,8 @@ def get_env_instance(env_name):
         env = GridWorld25x25()
     elif env_name == 'GridWorld42x42-v0':
         env = GridWorld42x42()
+    elif env_name == 'GridWorldRandFeatures42x42-v0':
+        env = GridWorldRandFeatures42x42()
     elif env_name == 'GridWorldSubspace50x50-v0':
         env = GridWorldSubspace50x50()
     else:

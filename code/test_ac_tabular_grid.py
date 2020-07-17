@@ -31,6 +31,8 @@ def get_env_instance(env_name):
         env = GridWorld25x25()
     elif env_name == 'GridWorld42x42-v0':
         env = GridWorld42x42()
+    elif env_name == 'GridWorldRandFeatures42x42-v0':
+        env = GridWorldRandFeatures42x42()
     elif env_name == 'GridWorldSubspace50x50-v0':
         env = GridWorldSubspace50x50()
     else:
@@ -50,7 +52,7 @@ def draw_heat_map(visitation_count, t, folder_name):
     plt.close()
 
 
-def warmup_enc_all_states(wm, env, start_time, buffer=None, device='cpu', **kwargs):
+def warmup_enc_all_states(wm, env, folder_name, start_time, buffer=None, device='cpu', **kwargs):
 
     def check_neigh_dists(states, neighbours):
         dist = []
@@ -67,13 +69,11 @@ def warmup_enc_all_states(wm, env, start_time, buffer=None, device='cpu', **kwar
         print(t, end='\r')
     states, neighbours = env.get_states_with_neighbours()
     t = -kwargs['wm_warmup_steps'] + 1
-
     check_neigh_dists(states, neighbours)
     if kwargs['wm_warmup_steps'] == 0:
         return
     print('Warming up world model...')
     while t < 0:
-        # for s in states:
         for s, neigh in zip(states, neighbours):
             assert s.sum() == 1.0
             if buffer is None:
@@ -88,6 +88,7 @@ def warmup_enc_all_states(wm, env, start_time, buffer=None, device='cpu', **kwar
             if t >= 0:
                 break
         check_neigh_dists(states, neighbours)
+        wm.save_encoder(folder_name + 'saved_objects/')
         if t >= 0:
             break
 
@@ -124,9 +125,9 @@ def main(env, visualise, folder_name, **kwargs):
             cont_buffer.add(s, None, None, None)
     wm.save(folder_name + 'saved_objects/')
     if kwargs['encoder_type'] == 'cont':
-        # wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-12_14-15-38-185893_-_zdim16_hdim64_eps01_envLoopAround_encPretrain2M_noEncTrainlr-3_test_cont_1/' + 'saved_objects/trained_encoder.pt')
+        wm.load_encoder('final_results/GridWorldRandFeatures42x42-v0/2020-07-16_04-28-47-985290_-_zdim32_hdim64_eps01_ns10_hinge01_preTrain2M3M_noEncTrain_uniform_enclr-3_cont_1/' + 'saved_objects/trained_encoder.pt')
         # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
-        warmup_enc_all_states(wm, env, start_time, buffer=cont_buffer, device=device, **kwargs)
+        warmup_enc_all_states(wm, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
         wm.save_encoder(folder_name + 'saved_objects/')
     pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
     visualise.eval_gridworld_iteration_update(pe_map=pe_map,
@@ -143,8 +144,8 @@ def main(env, visualise, folder_name, **kwargs):
             elif kwargs['encoder_type'] == 'cont' and cont_visited_uniform:
                 cont_buffer = torch.from_numpy(info['visited_states']).to(dtype=torch.float32)
             if alg.train_steps < kwargs['train_steps']:
-                # extra_args = {'memories': cont_buffer, 'distance': info['distance']}
-                extra_args = {'memories': cont_buffer}
+                extra_args = {'memories': cont_buffer, 'distance': info['distance']}
+                # extra_args = {'memories': cont_buffer}
                 r_int_t = wm.train(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
                                    torch.tensor([a_t], device=device),
                                    torch.from_numpy(s_tp1).to(dtype=torch.float32, device=device).unsqueeze(0),
@@ -214,7 +215,7 @@ def main(env, visualise, folder_name, **kwargs):
 if __name__ == "__main__":
 
     args = parse_args()
-    args['env_name'] = 'GridWorldSpiral28x28-v0'
+    args['env_name'] = 'GridWorldRandFeatures42x42-v0'
     np.random.seed(args['seed'])
     random.seed(args['seed'])
     torch.manual_seed(args['seed'])

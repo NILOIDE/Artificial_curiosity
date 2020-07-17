@@ -2,6 +2,7 @@ from tensorboardX import SummaryWriter
 import numpy as np
 import csv
 import sys
+import os
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -12,6 +13,7 @@ class Visualise:
 
         self.vis_args = kwargs
         self.folder_name = run_name
+        os.makedirs(run_name, exist_ok=True)
         self.writer = SummaryWriter(self.folder_name)
         self.train_interval = kwargs['export_interval']
         self.eval_interval = kwargs['eval_interval']

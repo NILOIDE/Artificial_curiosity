@@ -2,108 +2,12 @@ import torch
 import torch.nn as nn
 import numpy as np
 from modules.world_models.forward_model import ForwardModel
-from modules.encoders.learned_encoders import Encoder_2D_Sigma, Encoder_1D_Sigma, Encoder_1D, Encoder_2D
+from modules.encoders.learned_encoders import Encoder_1D, Encoder_2D
 from modules.encoders.random_encoder import RandomEncoder_1D, RandomEncoder_2D
 from modules.encoders.vae import VAE
 from modules.decoders.decoder import Decoder_2D, Decoder_2D_conv
-from torch.distributions import kl, Normal, MultivariateNormal
 import copy
 import os
-from collections import defaultdict
-
-
-class StochasticEncodedFM(nn.Module):
-    def __init__(self, x_dim, a_dim, device='cpu', **kwargs):
-        # type: (tuple, tuple, str, dict) -> None
-        super().__init__()
-        self.x_dim = x_dim
-        self.a_dim = a_dim
-        self.z_dim = kwargs['z_dim']
-        self.device = device
-        self.encoder = self.create_encoder(len(x_dim), **kwargs)
-        self.target_encoder = copy.deepcopy(self.encoder)
-        self.target_steps = kwargs['wm_target_net_steps']
-        self.soft_target = kwargs['wm_soft_target']
-        self.tau = kwargs['wm_tau']
-        self.world_model = ForwardModel(x_dim=self.encoder.get_z_dim(),
-                                        a_dim=self.a_dim,
-                                        device=self.device)  # type: ForwardModel
-        # self.loss_func_stochastic = kl.kl_divergence
-        self.loss_func = torch.nn.SmoothL1Loss(reduction='none').to(device)
-        self.train_steps = 0
-
-    def forward(self, x_t, a_t, x_tp1, n=32):
-        mu_t, log_sigma_t = self.encoder(x_t)
-        noise = Normal(torch.zeros_like(mu_t), torch.ones_like(log_sigma_t)).sample((n,))  ##
-        z_t = mu_t + log_sigma_t.exp() * noise  ##
-        z_t = z_t.view((-1, self.z_dim[0]))  # Samples of same dist are every batch_len elements
-        a_t = a_t.repeat((n,))  # Samples of same dist are every batch_len elements
-        # mu_tp1_prime, log_sigma_tp1_prime = self.world_model.forward(z_t, a_t)
-        # TODO: Does average of multiple samples help?
-        z_tp1 = self.world_model.forward(z_t, a_t)
-        mu_tp1, log_sigma_tp1 = self.target_encode(x_tp1)
-        mu_tp1, log_sigma_tp1 = mu_tp1.detach().repeat((n, 1)), log_sigma_tp1.detach().repeat((n, 1))
-        # distribution_tp1 = MultivariateNormal(mu_tp1_prime, torch.diag_embed((log_sigma_tp1_prime.exp())))
-        # distribution_target = MultivariateNormal(mu_tp1, torch.diag_embed((log_sigma_tp1.exp())))
-        # loss_rec = - distribution_target.log_prob(z_tp1).view((-1, n)).exp()
-        loss_rec = ((z_tp1 - mu_tp1) / (log_sigma_tp1.exp() + 1e-8)) ** 2
-        loss_rec = loss_rec.view((-1, self.z_dim[0], n)).sum(dim=1)
-        assert loss_rec.shape == (x_t.shape[0], n)
-        loss_rec = loss_rec.mean(dim=1)
-        assert loss_rec.shape[0] == x_t.shape[0]
-        # loss_reg = 0.5 * torch.sum(log_sigma_t.exp() + mu_t ** 2 - log_sigma_t - 1, dim=1)
-        # loss_recon = self.loss_func(distribution_target, distribution_tp1)
-        loss = loss_rec  # + 0.1 * loss_reg
-        if torch.isnan(loss).sum() != 0:
-            # print(torch.isnan(loss), z_tp1, distribution_target.log_prob(z_tp1))
-            # print(mu_t, log_sigma_t.exp())
-            # print(mu_tp1, log_sigma_tp1.exp())
-            # print(log_sigma_tp1.min(), log_sigma_tp1.max(), log_sigma_tp1_prime.min(), log_sigma_tp1_prime.max())
-            raise ValueError('Nan found in WM forward loss.')
-
-        self.train_steps += 1
-        if self.train_steps % self.target_steps == 0:
-            self.update_target()
-        # self.soft_update_target(self.tau)
-        return loss
-
-    def update_target(self):
-        self.target_encoder = copy.deepcopy(self.encoder)
-
-    def soft_update_target(self, tau):
-        for target_param, param in zip(self.target_encoder.parameters(), self.encoder.parameters()):
-            target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
-
-    def create_encoder(self, input_dim, **kwargs):
-        if input_dim == 1:
-            encoder = Encoder_1D_Sigma(x_dim=self.x_dim,
-                                       z_dim=self.z_dim,
-                                       batch_norm=kwargs['encoder_batchnorm'],
-                                       device=self.device)  # type: Encoder_1D_Sigma
-        else:
-            encoder = Encoder_2D_Sigma(x_dim=self.x_dim,
-                                       z_dim=self.z_dim,
-                                       batch_norm=kwargs['encoder_batchnorm'],
-                                       device=self.device)  # type: Encoder_2D_Sigma
-        return encoder
-
-    def encode(self, x):
-        return self.encoder(x)
-
-    def target_encode(self, x):
-        with torch.no_grad():
-            return self.target_encoder(x)
-
-    def next_z(self, z_t, a_t):
-        with torch.no_grad():
-            mu_tp1, log_sigma_tp1 = self.world_model(z_t, a_t)
-        return mu_tp1, log_sigma_tp1
-
-    def next_z_from_x(self, x_t, a_t):
-        with torch.no_grad():
-            mu_t, log_sigma_t = self.encode(x_t)
-            mu_tp1, log_sigma_tp1 = self.world_model(mu_t, a_t)
-        return mu_tp1, log_sigma_tp1
 
 
 class VAEFM(nn.Module):
@@ -332,7 +236,8 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                     # neg_samples = kwargs['memories'].sample_states(self.neg_samples)
                 else:
                     neg_samples = kwargs['memories']
-                loss_ns = self.calculate_contrastive_loss(neg_samples, z_t=z_t, pos_examples_z=z_tp1)
+                # loss_ns = self.calculate_contrastive_loss(neg_samples, z_t=z_t, pos_examples_z=z_tp1)
+                loss_ns = self.calculate_neg_example_loss(neg_samples, z_t=z_t)
                 loss = (loss_trans + loss_ns).mean()
             else:
                 loss = loss_trans.mean()
@@ -501,12 +406,12 @@ class DeterministicInvDynFeatFM(nn.Module):
 
         def forward(self, phi_t, phi_tp1):
             # type: (torch.tensor, torch.tensor) -> torch.tensor
-            assert len(phi_t.shape) > 1, 'Do not forget batch dim'
+            # assert len(phi_t.shape) > 1, 'Do not forget batch dim'
             x = torch.cat((phi_t, phi_tp1), dim=1)
-            assert x.shape[0] == phi_t.shape[0]
-            assert len(x.shape) == len(phi_t.shape)
+            # assert x.shape[0] == phi_t.shape[0]
+            # assert len(x.shape) == len(phi_t.shape)
             a_pred = self.model(x)
-            assert a_pred.shape[1:] == self.a_dim
+            # assert a_pred.shape[1:] == self.a_dim
             return a_pred
 
     def __init__(self, x_dim, a_dim, device='cpu', **kwargs):
@@ -636,12 +541,8 @@ class EncodedWorldModel:
         assert kwargs['encoder_type'] in {'random', 'cont', 'vae', 'idf'}, 'Unknown encoder type.'
         self.enc_is_vae = False
         if kwargs['encoder_type'] == 'cont':
-            if kwargs['stochastic_latent']:
-                self.model = StochasticEncodedFM(x_dim, a_dim, device=self.device,
-                                                 **kwargs)  # type: StochasticEncodedFM
-            else:
-                self.model = DeterministicContrastiveEncodedFM(x_dim, a_dim, device=self.device,
-                                                               **kwargs)  # type: DeterministicContrastiveEncodedFM
+            self.model = DeterministicContrastiveEncodedFM(x_dim, a_dim, device=self.device,
+                                                           **kwargs)  # type: DeterministicContrastiveEncodedFM
         elif kwargs['encoder_type'] == 'random':
             self.model = DeterministicCRandomEncodedFM(x_dim, a_dim, device=self.device,
                                                        **kwargs)  # type: DeterministicCRandomEncodedFM
@@ -698,7 +599,7 @@ class EncodedWorldModel:
         self.optimizer_wm.step()
         for key in loss_items:
             self.losses[key].append(loss_items[key])
-        if self._its_a_gridworld_bois and store_loss:
+        if self._its_a_gridworld_bois and store_loss and 'distance' in kwargs:
             key = str(x_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
             if key in self.state_wise_loss_diff:
                 self.state_wise_loss_diff[key]['list'].append(
@@ -856,7 +757,8 @@ class WorldModelContrastive:
         # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
-        int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
+        # int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
+        int_reward = self.train_contrastive_enc_and_fm(x_t, a_t, x_tp1, **kwargs)
         return int_reward
 
     def train_contrastive_encoder(self, x_t, negative_examples, positive_examples=None):
@@ -1075,14 +977,14 @@ class TabularWorldModel:
         a_t = a_t[0]
         if s_t_key not in self.predictions:
             self.predictions[s_t_key] = [torch.zeros(self.obs_dim) for _ in range(self.a_dim[0])]
-        error = (s_tp1 - self.predictions[s_t_key][a_t])
+        error = (s_tp1 - (s_t + self.predictions[s_t_key][a_t]))
         r_int = error.pow(2.0).sum()
         self.predictions[s_t_key][a_t] += self.lr * error
         if self._its_a_gridworld_bois and store_loss:
             key = str(s_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
             if key in self.state_wise_loss_diff:
                 self.state_wise_loss_diff[key]['list'].append(abs(self.state_wise_loss[key]['list'][-1] - r_int.item()))
-            new_d = (s_tp1 - self.predictions[s_t_key][a_t]).pow(2.0).sum()
+            new_d = (s_tp1 - (s_t + self.predictions[s_t_key][a_t])).pow(2.0).sum()
             if key in self.state_wise_loss:
                 self.state_wise_loss[key]['list'].append(new_d.item())
             else:

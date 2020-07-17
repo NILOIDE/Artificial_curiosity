@@ -22,6 +22,12 @@ setup(name='GridWorld42x42',
       packages=find_packages()
       )
 
+setup(name='GridWorldRandFeatures42x42',
+      version='0.1',
+      install_requires=['gym', 'numpy'],
+      packages=find_packages()
+      )
+
 setup(name='GridWorldSubspace50x50',
       version='0.1',
       install_requires=['gym', 'numpy'],

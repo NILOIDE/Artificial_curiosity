@@ -57,11 +57,6 @@ class SimpleGridWorld(gym.Env):
         direction = (a - 1) % 2
         if a != 0:
             if direction == 0:
-            #     if self.pos[dim] > 0:
-            #         self.pos[dim] -= 1
-            # else:
-            #     if self.pos[dim] < self.size[dim] - 1:
-            #         self.pos[dim] += 1
                 self.pos[dim] = (self.pos[dim] - 1) % self.size[dim]
             else:
                 self.pos[dim] = (self.pos[dim] + 1) % self.size[dim]
@@ -153,6 +148,84 @@ class SimpleGridWorld(gym.Env):
         return states
 
 
+class GridWorldRandomFeatures(SimpleGridWorld):
+    def __init__(self, size: tuple, **kwargs):
+        super().__init__(size=size, **kwargs)
+        self.feature_size = np.prod(size)
+        self.state_features = np.random.uniform(low=0.0, high=1.0, size=(*size, self.feature_size))
+        self.observation_space = spaces.MultiBinary(n=int(self.feature_size))
+
+    def reset(self):
+        self.t = 0
+        self.pos = copy.copy(self.start_pos)
+        s = self.state_features[self.pos]
+        assert s.shape[0] == self.feature_size
+        self.last_state = s
+        self.update_visitation_counts()
+        return s
+
+    def step(self, a: int):
+        self.t += 1
+        info = self._create_info_dict()
+        dim = (a - 1) // 2
+        assert 0 <= a < self.n_dims * 2 + 1, 'Invalid action: 0 <= a < ' + str(self.n_dims * 2 + 1)
+        direction = (a - 1) % 2
+        if a != 0:
+            if direction == 0:
+                self.pos[dim] = (self.pos[dim] - 1) % self.size[dim]
+            else:
+                self.pos[dim] = (self.pos[dim] + 1) % self.size[dim]
+        s = self.state_features[self.pos]
+        self.last_state = s
+        self.update_visitation_counts()
+        return s, info['uniform_diff'], False, info
+
+    def get_states(self):
+        states = []
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                s = self.state_features[i, j]
+                states.append(s)
+        return states
+
+    def get_states_with_neighbours(self):
+        states = []
+        neighbours = []
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                neigh = []
+                # If self is neighbour (due to wall), that neighbour is omitted
+                # if i > 0:
+                neigh.append(self.state_features[(i - 1)%self.size[0], j])
+                # if i < self.size[0] - 1:
+                neigh.append(self.state_features[(i + 1)%self.size[0], j])
+                # if j > 0:
+                neigh.append(self.state_features[i, (j - 1)%self.size[1]])
+                # if j < self.size[1] - 1:
+                neigh.append(self.state_features[i, (j + 1)%self.size[1]])
+                neighbours.append(np.array(neigh))
+                assert len(neighbours[-1].shape) == 2
+                assert neighbours[-1].shape[0] == 4
+                assert neighbours[-1].shape[1] == self.feature_size
+                s = self.state_features[i, j]
+                assert s.shape[0] == self.feature_size
+                assert len(s) == 1
+                states.append(s)
+        return states, neighbours
+
+    def get_visited_states(self):
+        states = []
+        count = self.visitation_count.reshape((-1,))
+        for i in range(self.size[0]):
+            for j in range(self.size[1]):
+                if self.visited_states[i, j] == 1:
+                    continue
+                for _ in range(int(count[i])):
+                    s = self.state_features[i, j]
+                    states.append(s)
+        return states
+
+
 class GridWorldSubspaces(SimpleGridWorld):
     def __init__(self, size: tuple, **kwargs):
         super().__init__(size=size, **kwargs)
@@ -218,16 +291,6 @@ class GridWorldSubspaces(SimpleGridWorld):
     def _subspace_feature(self, pos):
         feature = self.subspace_features[pos[0], pos[1], :]
         return feature
-
-    # def _subspace_feature(self, pos):
-    #     subspace = []
-    #     for i in range(len(pos)):
-    #         subspace.append(pos[i] % self.subspace_size[i])
-    #     # Only works for 2D gridworld
-    #     feature = np.zeros((np.prod(self.subspace_size,)))
-    #     idx = subspace[0] + subspace[1] * self.subspace_size[0]
-    #     feature[idx] = 1.0
-    #     return feature
 
     def get_states(self):
         states = []
@@ -363,15 +426,17 @@ class GridWorldLoad(SimpleGridWorld):
         neighbours = []
         for i in range(self.size[0]):
             for j in range(self.size[1]):
+                if not self.accesible_states[i, j]:  # If grid element is a wall, skip
+                    continue
                 neigh = []
                 # If self is neighbour (due to wall), that neighbour is omitted
-                if i > 0 and not self.map[i - 1, j]:
+                if i - 1 >= 0 and self.accesible_states[i - 1, j]:
                     neigh.append(self._index_to_grid([i - 1, j]).reshape((-1,)))
-                if i < self.size[0] - 1 and not self.map[i + 1, j]:
+                if i + 1 < self.size[0] and self.accesible_states[i + 1, j]:
                     neigh.append(self._index_to_grid([i + 1, j]).reshape((-1,)))
-                if j > 0 and not self.map[i, j - 1]:
+                if j - 1 >= 0 and self.accesible_states[i, j - 1]:
                     neigh.append(self._index_to_grid([i, j - 1]).reshape((-1,)))
-                if j < self.size[1] - 1 and not self.map[i, j + 1]:
+                if j + 1 < self.size[1] and self.accesible_states[i, j + 1]:
                     neigh.append(self._index_to_grid([i, j + 1]).reshape((-1,)))
                 neighbours.append(np.array(neigh))
                 s = self._index_to_grid([i, j]).reshape((-1,))
@@ -392,6 +457,11 @@ class GridWorld25x25(SimpleGridWorld):
 class GridWorld42x42(SimpleGridWorld):
     def __init__(self):
         super(GridWorld42x42, self).__init__(size=(42, 42))
+
+
+class GridWorldRandFeatures42x42(SimpleGridWorld):
+    def __init__(self):
+        super(GridWorldRandFeatures42x42, self).__init__(size=(42, 42))
 
 
 class GridWorldSubspace50x50(GridWorldSubspaces):

@@ -15,6 +15,11 @@ register(id='GridWorld42x42-v0',
          max_episode_steps=42*2
          )
 
+register(id='GridWorldRandFeatures42x42-v0',
+         entry_point='grid_gym.envs:GridWorldRandFeatures42x42',
+         max_episode_steps=42*2
+         )
+
 register(id='GridWorldSubspace50x50-v0',
          entry_point='grid_gym.envs:GridWorldSubspace50x50',
          max_episode_steps=50*2
