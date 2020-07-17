@@ -12,7 +12,7 @@ def parse_args():
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
-    parser.add_argument('--buffer_size', type=int, default=int(5e4))
+    parser.add_argument('--buffer_size', type=int, default=int(8e4))
     parser.add_argument('--train_steps', type=int, default=int(2e6))
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--eps_static', type=bool, default=True)
