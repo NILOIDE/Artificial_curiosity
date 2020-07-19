@@ -152,7 +152,6 @@ class DeterministicContrastiveEncodedFM(nn.Module):
 
         def __init__(self, hinge: float):
             super().__init__()
-
             self.hinge = hinge
 
         def apply_tensor_constraints(self, x, required_dim, name=''):
@@ -236,8 +235,8 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                     # neg_samples = kwargs['memories'].sample_states(self.neg_samples)
                 else:
                     neg_samples = kwargs['memories']
-                # loss_ns = self.calculate_contrastive_loss(neg_samples, z_t=z_t, pos_examples_z=z_tp1)
-                loss_ns = self.calculate_neg_example_loss(neg_samples, z_t=z_t)
+                loss_ns = self.calculate_contrastive_loss(neg_samples, z_t=z_t, pos_examples_z=z_tp1)
+                # loss_ns = self.calculate_neg_example_loss(neg_samples, z_t=z_t)
                 loss = (loss_trans + loss_ns).mean()
             else:
                 loss = loss_trans.mean()
@@ -301,7 +300,7 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                         "There should be an equal amount of pos examples per z."
                     pos_examples_z = pos_examples_z.view((z_t.shape[0], pos_examples_z.shape[0] // z_t.shape[0], -1))
             z_t_expanded = z_t.unsqueeze(1).repeat((1, pos_examples_z.shape[1], 1))
-            pos_loss = (z_t_expanded - pos_examples_z).pow(2).sum(dim=2).mean(dim=1)
+            pos_loss = (z_t_expanded - pos_examples_z).pow(2).sum(dim=2).clamp(min=self.loss_func_neg_sampling.hinge).mean(dim=1)
             loss += pos_loss
         return loss.mean()
 
@@ -757,8 +756,8 @@ class WorldModelContrastive:
         # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
-        # int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
-        int_reward = self.train_contrastive_enc_and_fm(x_t, a_t, x_tp1, **kwargs)
+        int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
+        # int_reward = self.train_contrastive_enc_and_fm(x_t, a_t, x_tp1, **kwargs)
         return int_reward
 
     def train_contrastive_encoder(self, x_t, negative_examples, positive_examples=None):
