@@ -909,7 +909,7 @@ class WorldModelNoEncoder:
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         self.optimizer.step()
-        if self._its_a_gridworld_bois and store_loss:
+        if self._its_a_gridworld_bois and store_loss and 'distance' in kwargs:
             key = str(x_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
             if key in self.state_wise_loss_diff:
                 self.state_wise_loss_diff[key]['list'].append(
@@ -979,7 +979,7 @@ class TabularWorldModel:
         error = (s_tp1 - (s_t + self.predictions[s_t_key][a_t]))
         r_int = error.pow(2.0).sum()
         self.predictions[s_t_key][a_t] += self.lr * error
-        if self._its_a_gridworld_bois and store_loss:
+        if self._its_a_gridworld_bois and store_loss and 'distance' in kwargs:
             key = str(s_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
             if key in self.state_wise_loss_diff:
                 self.state_wise_loss_diff[key]['list'].append(abs(self.state_wise_loss[key]['list'][-1] - r_int.item()))

@@ -148,18 +148,19 @@ class SimpleGridWorld(gym.Env):
         return states
 
 
-class GridWorldRandomFeatures(SimpleGridWorld):
+class GridWorldRandFeatures(SimpleGridWorld):
     def __init__(self, size: tuple, **kwargs):
+        print('Random Feature Gridworld!')
         super().__init__(size=size, **kwargs)
         self.feature_size = np.prod(size)
-        self.state_features = np.random.uniform(low=0.0, high=1.0, size=(*size, self.feature_size))
+        self.state_features = np.random.uniform(low=0.0, high=1.0, size=(*size, self.feature_size)).round()
         self.observation_space = spaces.MultiBinary(n=int(self.feature_size))
 
     def reset(self):
         self.t = 0
         self.pos = copy.copy(self.start_pos)
-        s = self.state_features[self.pos]
-        assert s.shape[0] == self.feature_size
+        s = self.state_features[tuple(self.pos)]
+        assert s.shape[0] == self.feature_size, s.shape
         self.last_state = s
         self.update_visitation_counts()
         return s
@@ -175,7 +176,7 @@ class GridWorldRandomFeatures(SimpleGridWorld):
                 self.pos[dim] = (self.pos[dim] - 1) % self.size[dim]
             else:
                 self.pos[dim] = (self.pos[dim] + 1) % self.size[dim]
-        s = self.state_features[self.pos]
+        s = self.state_features[tuple(self.pos)]
         self.last_state = s
         self.update_visitation_counts()
         return s, info['uniform_diff'], False, info
@@ -209,7 +210,7 @@ class GridWorldRandomFeatures(SimpleGridWorld):
                 assert neighbours[-1].shape[1] == self.feature_size
                 s = self.state_features[i, j]
                 assert s.shape[0] == self.feature_size
-                assert len(s) == 1
+                assert len(s.shape) == 1
                 states.append(s)
         return states, neighbours
 
@@ -459,7 +460,7 @@ class GridWorld42x42(SimpleGridWorld):
         super(GridWorld42x42, self).__init__(size=(42, 42))
 
 
-class GridWorldRandFeatures42x42(SimpleGridWorld):
+class GridWorldRandFeatures42x42(GridWorldRandFeatures):
     def __init__(self):
         super(GridWorldRandFeatures42x42, self).__init__(size=(42, 42))
 

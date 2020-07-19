@@ -125,7 +125,7 @@ def main(env, visualise, folder_name, **kwargs):
             cont_buffer.add(s, None, None, None)
     wm.save(folder_name + 'saved_objects/')
     if kwargs['encoder_type'] == 'cont':
-        wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-18_23-08-06-092308_-_zdim32_hdim64_eps01_ns10_hinge01_encPretrain2M_noEncTrain_uniform_enclr-3_posExClamp_cont_1/' + 'saved_objects/trained_encoder.pt')
+        # wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-18_23-08-06-092308_-_zdim32_hdim64_eps01_ns10_hinge01_encPretrain2M_noEncTrain_uniform_enclr-3_posExClamp_cont_1/' + 'saved_objects/trained_encoder.pt')
         # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
         warmup_enc_all_states(wm, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
         wm.save_encoder(folder_name + 'saved_objects/')
@@ -144,8 +144,8 @@ def main(env, visualise, folder_name, **kwargs):
             elif kwargs['encoder_type'] == 'cont' and cont_visited_uniform:
                 cont_buffer = torch.from_numpy(info['visited_states']).to(dtype=torch.float32)
             if alg.train_steps < kwargs['train_steps']:
-                # extra_args = {'memories': cont_buffer, 'distance': info['distance']}
-                extra_args = {'memories': cont_buffer}
+                extra_args = {'memories': cont_buffer, 'distance': info['distance']}
+                # extra_args = {'memories': cont_buffer}
                 r_int_t = wm.train(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
                                    torch.tensor([a_t], device=device),
                                    torch.from_numpy(s_tp1).to(dtype=torch.float32, device=device).unsqueeze(0),
@@ -205,7 +205,6 @@ def main(env, visualise, folder_name, **kwargs):
                         plt.savefig(run_name + kwargs['encoder_type'] + '_distance' + str(d) + '.png')
                         plt.close()
 
-
     env.close()
     print('Environment closed.')
     visualise.close()
@@ -215,7 +214,7 @@ def main(env, visualise, folder_name, **kwargs):
 if __name__ == "__main__":
 
     args = parse_args()
-    args['env_name'] = 'GridWorld42x42-v0'
+    args['env_name'] = 'GridWorldRandFeatures42x42-v0'
     np.random.seed(args['seed'])
     random.seed(args['seed'])
     torch.manual_seed(args['seed'])

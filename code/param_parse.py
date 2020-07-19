@@ -8,7 +8,7 @@ def parse_args():
 
     parser.add_argument('--env_name', type=str, default='Breakout-v0')
     parser.add_argument('--save_dir', type=str, default='final_results/')
-    parser.add_argument('--name', type=str, default='zdim32_hdim64_eps01_ns10_hinge01_encPretrain2M_uniform_enclr-3_posExClamp')
+    parser.add_argument('--name', type=str, default='')
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
