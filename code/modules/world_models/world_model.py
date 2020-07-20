@@ -247,21 +247,21 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                          'wm_ns_loss': loss_ns.detach().mean().item()}
         return loss_trans.detach(), loss, loss_dict
 
-    def calculate_neg_example_loss(self, neg_examples, x_t=None, z_t=None):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]
-        if z_t is None:
-            assert x_t is not None, "Either x_t or z_t should be None."
-            z_t = self.encoder(x_t)
-        else:
-            assert x_t is None, "Either x_t or z_t should be None."
-        if len(tuple(z_t.shape)) == 1:  # Add batch dimension to 1D tensor
-            z_t = z_t.unsqueeze(0)
-        assert len(tuple(neg_examples.shape)) == 2
-
-        neg_samples_z = self.encoder(neg_examples)
-        neg_samples_z = neg_samples_z.unsqueeze(0)
-        neg_samples_z = neg_samples_z.repeat((z_t.shape[0], 1, 1))
-        return self.loss_func_neg_sampling(z_t, neg_samples_z).mean()
+    # def calculate_neg_example_loss(self, neg_examples, x_t=None, z_t=None):
+    #     # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]
+    #     if z_t is None:
+    #         assert x_t is not None, "Either x_t or z_t should be None."
+    #         z_t = self.encoder(x_t)
+    #     else:
+    #         assert x_t is None, "Either x_t or z_t should be None."
+    #     if len(tuple(z_t.shape)) == 1:  # Add batch dimension to 1D tensor
+    #         z_t = z_t.unsqueeze(0)
+    #     assert len(tuple(neg_examples.shape)) == 2
+    #
+    #     neg_samples_z = self.encoder(neg_examples)
+    #     neg_samples_z = neg_samples_z.unsqueeze(0)
+    #     neg_samples_z = neg_samples_z.repeat((z_t.shape[0], 1, 1))
+    #     return self.loss_func_neg_sampling(z_t, neg_samples_z).mean()
 
     def calculate_contrastive_loss(self, neg_examples, x_t=None, z_t=None, pos_examples=None, pos_examples_z=None):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]

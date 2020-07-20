@@ -75,7 +75,6 @@ def warmup_enc_all_states(wm, env, folder_name, start_time, buffer=None, device=
     print('Warming up world model...')
     while t < 0:
         for s, neigh in zip(states, neighbours):
-            assert s.sum() == 1.0
             if buffer is None:
                 wm.train_contrastive_encoder(torch.from_numpy(s).to(dtype=torch.float32, device=device),
                                              torch.from_numpy(np.array(states)).to(dtype=torch.float32, device=device),
@@ -125,7 +124,7 @@ def main(env, visualise, folder_name, **kwargs):
             cont_buffer.add(s, None, None, None)
     wm.save(folder_name + 'saved_objects/')
     if kwargs['encoder_type'] == 'cont':
-        # wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-18_23-08-06-092308_-_zdim32_hdim64_eps01_ns10_hinge01_encPretrain2M_noEncTrain_uniform_enclr-3_posExClamp_cont_1/' + 'saved_objects/trained_encoder.pt')
+        # wm.load_encoder('final_results/GridWorldRandFeatures42x42-v0/2020-07-19_06-24-51-038119_-_zdim32_hdim64_eps01_ns10_hinge01_uniform_pretrainEnc1M_noEncTrain_enclr-2_cont_1/' + 'saved_objects/trained_encoder.pt')
         # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
         warmup_enc_all_states(wm, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
         wm.save_encoder(folder_name + 'saved_objects/')

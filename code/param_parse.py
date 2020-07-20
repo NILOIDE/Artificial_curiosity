@@ -8,7 +8,7 @@ def parse_args():
 
     parser.add_argument('--env_name', type=str, default='Breakout-v0')
     parser.add_argument('--save_dir', type=str, default='final_results/')
-    parser.add_argument('--name', type=str, default='')
+    parser.add_argument('--name', type=str, default='zdim32_hdim64_eps01_ns10_hinge01_visited_enclr-3')
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument('--hinge_value', type=float, default=0.1)
     parser.add_argument('--idf_inverse_hdim', type=str, default='(64,)')
 
-    parser.add_argument('--gridworld_ns_pool', type=str, default="uniform", choices=['visited', 'uniform', 'visited_uniform'])
+    parser.add_argument('--gridworld_ns_pool', type=str, default="visited", choices=['visited', 'uniform', 'visited_uniform'])
 
     args = parser.parse_args().__dict__
     args['time_stamp'] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")
