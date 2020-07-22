@@ -3,12 +3,13 @@ from utils.utils import CONV_LAYERS2014, CONV_LAYERS2015
 from datetime import datetime
 from ast import literal_eval as make_tuple
 
+
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('--env_name', type=str, default='Breakout-v0')
     parser.add_argument('--save_dir', type=str, default='final_results/')
-    parser.add_argument('--name', type=str, default='zdim32_hdim64_eps01_ns10_hinge01_visited_enclr-3')
+    parser.add_argument('--name', type=str, default='visited_x10_lr-2')
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
@@ -29,7 +30,7 @@ def parse_args():
     parser.add_argument('--wm_target_net_steps', type=int, default=0)
     parser.add_argument('--wm_soft_target', type=bool, default=False)
     parser.add_argument('--wm_lr', type=float, default=1e-3)
-    parser.add_argument('--wm_enc_lr', type=float, default=1e-3)
+    parser.add_argument('--wm_enc_lr', type=float, default=1e-2)
     parser.add_argument('--wm_tau', type=float, default=0.01)
     parser.add_argument('--wm_warmup_steps', type=int, default=0)
     parser.add_argument('--intr_rew_norm_type', type=str, default='whiten_history',
