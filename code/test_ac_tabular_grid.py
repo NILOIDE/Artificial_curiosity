@@ -13,7 +13,7 @@ import shutil
 from param_parse import parse_args
 from eval_wm import eval_wm
 from modules.algorithms.DQN import TabularQlearning, DQN
-from modules.world_models.world_model import TabularWorldModel, WorldModelNoEncoder, EncodedWorldModel, WorldModelContrastive
+from modules.world_models.world_model import TabularWorldModel, WorldModelNoEncoder, EncodedWorldModel, WorldModelContrastive, CountBasedWorldModel
 from modules.replay_buffers.replay_buffer import DynamicsReplayBuffer
 import matplotlib.pyplot as plt
 
@@ -104,6 +104,9 @@ def main(env, visualise, folder_name, **kwargs):
     if kwargs['encoder_type'] == 'tab':
         wm = TabularWorldModel(obs_dim, a_dim, kwargs['wm_lr'], **kwargs)
         device = 'cpu'
+    elif kwargs['encoder_type'] == 'count':
+        wm = CountBasedWorldModel(obs_dim, a_dim, **kwargs)
+        device = 'cpu'
     else:
         device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
         if kwargs['encoder_type'] == 'none':
@@ -124,11 +127,13 @@ def main(env, visualise, folder_name, **kwargs):
             cont_buffer.add(s, None, None, None)
     wm.save(folder_name + 'saved_objects/')
     if kwargs['encoder_type'] == 'cont':
-        # wm.load_encoder('final_results/GridWorldSpiral28x28-v0/2020-07-21_02-24-49-062477_-_uniform_lr-3_encPretrain2M_noEncTrain_cont_1/' + 'saved_objects/trained_encoder.pt')
+        # wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-25_00-56-30-805054_-_uniform_lr-2_encPretrain2M_noEncTrain_cont_3/' + 'saved_objects/trained_encoder.pt')
         # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
         warmup_enc_all_states(wm, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
         wm.save_encoder(folder_name + 'saved_objects/')
-    pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
+    pe_map, q_map, walls_map = None, None, None
+    if not isinstance(wm, CountBasedWorldModel):
+        pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
     visualise.eval_gridworld_iteration_update(pe_map=pe_map,
                                               q_map=q_map,
                                               walls_map=walls_map)
@@ -178,7 +183,9 @@ def main(env, visualise, folder_name, **kwargs):
                 if alg.train_steps % kwargs['eval_interval'] == 0:
                     if kwargs['env_name'][:9] == 'GridWorld':
                         draw_heat_map(info['density'], alg.train_steps, folder_name)
-                        pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
+                        pe_map, q_map, walls_map = None, None, None
+                        if not isinstance(wm, CountBasedWorldModel):
+                            pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
                         visualise.eval_gridworld_iteration_update(density_map=info['density'],
                                                                   pe_map=pe_map,
                                                                   q_map=q_map,
@@ -186,7 +193,7 @@ def main(env, visualise, folder_name, **kwargs):
                     wm.save(folder_name + 'saved_objects/')
             s_t = s_tp1
 
-            if alg.train_steps % 50000 == 0:
+            if not isinstance(wm, CountBasedWorldModel) and alg.train_steps % 50000 == 0:
                 for d in range(2, 20):
                     to_plot = []
                     for i, li in enumerate(wm.state_wise_loss_diff):
@@ -217,7 +224,7 @@ if __name__ == "__main__":
     np.random.seed(args['seed'])
     random.seed(args['seed'])
     torch.manual_seed(args['seed'])
-    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}_-_{args['name']}_{args['encoder_type']}_{args['seed']}/"
+    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}-{args['name']}_{args['encoder_type']}_{args['seed']}/"
     print(run_name)
     environment = gym.make(args['env_name'])
     visualise = Visualise(run_name, **args)

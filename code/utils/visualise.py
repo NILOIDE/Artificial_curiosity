@@ -75,9 +75,11 @@ class Visualise:
         self.writer.add_scalar("Training/Mean ep extrinsic rewards", kwargs['ext'], t)
         self.writer.add_scalar("Training/Mean step intrinsic rewards", kwargs['int'], t)
 
-    def eval_iteration_update(self, ext, int):
+    def eval_iteration_update(self, ext, int, std_ext=None):
         self.writer.add_scalar("Evaluation/Mean ep extrinsic rewards", ext, self.eval_id)
         self.writer.add_scalar("Evaluation/Mean ep intrinsic rewards", int, self.eval_id)
+        if std_ext is not None:
+            self.writer.add_scalar("Evaluation/SD ep extrinsic rewards", ext, self.eval_id)
         self.eval_id += self.eval_interval
 
     def eval_gridworld_iteration_update(self, **kwargs):
@@ -103,7 +105,7 @@ class Visualise:
                 self.writer.add_image("Evaluation/Visitation densities", density_map_rgb, self.eval_id)
             else:
                 self.writer.add_image("Evaluation/Visitation densities", density_map, self.eval_id)
-        if 'pe_map' in kwargs:
+        if 'pe_map' in kwargs and kwargs['pe_map'] is not None:
             if len(kwargs['pe_map'].shape) == 2:
                 kwargs['pe_map'] = np.expand_dims(kwargs['pe_map'], axis=0)
             # Remove nodes that are walls

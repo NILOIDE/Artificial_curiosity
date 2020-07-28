@@ -9,12 +9,12 @@ def parse_args():
 
     parser.add_argument('--env_name', type=str, default='Breakout-v0')
     parser.add_argument('--save_dir', type=str, default='final_results/')
-    parser.add_argument('--name', type=str, default='visited_x10_lr-2')
+    parser.add_argument('--name', type=str, default='')
     parser.add_argument('--seed', help='RNG seed', type=int, default=1)
     parser.add_argument('--export_interval', type=int, default=500)
     parser.add_argument('--eval_interval', type=int, default=int(2e4))
     parser.add_argument('--buffer_size', type=int, default=int(8e4))
-    parser.add_argument('--train_steps', type=int, default=int(2e6))
+    parser.add_argument('--train_steps', type=int, default=int(3e6))
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--eps_static', type=bool, default=True)
     parser.add_argument('--eps_half', help='Epsilon at half t in exponential epsilon decay', type=float, default=0.08)
@@ -37,8 +37,8 @@ def parse_args():
                         choices=['none', 'max', 'whiten', 'max_history', 'whiten_history'])
     parser.add_argument('--intr_rew_mean_n', help='Length of history in running mean', type=int, default=1000)
 
-    parser.add_argument('--encoder_type', type=str, default="cont",
-                        choices=['tab', 'none', 'random', 'cont', 'idf', 'vae'])
+    parser.add_argument('--encoder_type', type=str, default="idf",
+                        choices=['count', 'tab', 'none', 'random', 'cont', 'idf', 'vae'])
     parser.add_argument('--decoder', type=bool, default=False)
     parser.add_argument('--resize_dim', type=str, default='(84, 84)')
     parser.add_argument('--grayscale', type=bool, default=True)

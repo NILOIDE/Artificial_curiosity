@@ -120,7 +120,7 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
           f'Lengths: {returns["len"]}\n',
           f'Eval time: {(datetime.now() - eval_start).total_seconds()}s.\n',
           f'Num episodes: {n}')
-    return {'ext': np.mean(returns['ext']), 'int': np.mean(returns['int'])}
+    return {'ext': np.mean(returns['ext']), 'int': np.mean(returns['int']), 'std_ext': np.std(returns['ext'])}
 
 
 def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
@@ -151,7 +151,7 @@ def main(env, visualise, folder_name, **kwargs):
            (obs_dim[0] == 3 * kwargs['frame_stack'] and not kwargs['grayscale']), \
         f'Expected channels first. Received: {obs_dim}'
     a_dim = (env.action_space.n,)
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'#'cuda' if torch.cuda.is_available() else 'cpu'
     print('Device:', device)
     alg = DQN(obs_dim, a_dim, device=device, **kwargs)
     if kwargs['encoder_type'] == 'cont':

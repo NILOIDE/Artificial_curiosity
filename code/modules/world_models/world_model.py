@@ -20,6 +20,11 @@ class VAEFM(nn.Module):
         self.z_dim = kwargs['z_dim']
         self.device = device
         self.vae = VAE(x_dim, device=device, **kwargs)  # type: VAE
+        self.target_encoder_steps = kwargs['wm_target_net_steps']
+        self.soft_target = kwargs['wm_soft_target']
+        self.target_encoder = None
+        if self.soft_target or self.target_encoder_steps != 0:
+            self.target_encoder = copy.deepcopy(self.vae.encoder).to(device)
         self.forward_model = ForwardModel(x_dim=kwargs['z_dim'],
                                           a_dim=self.a_dim,
                                           hidden_dim=kwargs['wm_h_dim'],
@@ -35,8 +40,13 @@ class VAEFM(nn.Module):
         and should be given as floats.
         """
         # Section necessary for training and eval (Calculate batch-wise translation error in latent space)
-        z_t = self.vae.encode(x_t)
-        z_tp1 = self.vae.encode(x_tp1)
+        if self.target_encoder is not None:
+            with torch.no_grad():
+                z_t, *_ = self.target_encoder(x_t)
+                z_tp1, *_ = self.target_encoder(x_tp1)
+        else:
+            z_t = self.vae.encode(x_t)
+            z_tp1 = self.vae.encode(x_tp1)
         z_diff = self.forward_model(z_t, a_t)
         assert not z_t.requires_grad
         assert not z_tp1.requires_grad
@@ -47,11 +57,24 @@ class VAEFM(nn.Module):
             vae_loss, *_ = self.vae(x_t)
             loss_wm = loss_wm_vector.mean()
             self.train_steps += 1
+            self.update_target_encoder()
             loss = vae_loss + loss_wm
             loss_dict = {'wm_loss': loss.detach().mean().item(),
                          'wm_trans_loss': loss_wm.detach().item(),
                          'wm_vae_loss': vae_loss.detach().item()}
         return loss_wm_vector.detach(), loss, loss_dict
+
+    def update_target_encoder(self):
+        if self.target_encoder is not None:
+            if self.soft_target:
+                for target_param, param in zip(self.target_encoder.parameters(), self.vae.encoder.parameters()):
+                    target_param.data.copy_(target_param.data * (1.0 - 0.01) + param.data * 0.01)
+            else:
+                assert self.target_encoder_steps != 0
+                if self.train_steps % self.target_encoder_steps == 0:
+                    self.target_encoder = copy.deepcopy(self.vae.encoder).to(self.device)
+        else:
+            assert not self.soft_target or self.target_encoder_steps == 0
 
     def encode(self, x):
         with torch.no_grad():
@@ -611,42 +634,6 @@ class EncodedWorldModel:
                 self.state_wise_loss_diff[key] = {'d': kwargs['distance'], 'list': []}
         return intr_reward
 
-    def train_contrastive_encoder(self, x_t, negative_examples, positive_examples=None):
-        # type: (torch.Tensor, object, torch.Tensor) -> None
-        if isinstance(negative_examples, np.ndarray):
-            negative_examples = torch.from_numpy(negative_examples).to(dtype=torch.float32, device=self.device)
-        if not isinstance(negative_examples, torch.Tensor):
-            negative_examples = torch.from_numpy(negative_examples.sample_states(
-                self.model.neg_samples)).to(dtype=torch.float32, device=self.device)
-        self.model.zero_grad()
-        loss = self.model.calculate_contrastive_loss(negative_examples, x_t=x_t, pos_examples=positive_examples)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-        self.optimizer_wm.step()
-        self.losses['wm_ns_loss'].append(loss.item())
-
-    def train_contrastive_fm(self, x_t, a_t, x_tp1, store_loss=True, **kwargs):
-        # type: (torch.Tensor, torch.Tensor, torch.Tensor, bool, dict) -> torch.Tensor
-        self.model.zero_grad()
-        intr_reward, loss, loss_items = self.model.forward_fm_only(x_t, a_t, x_tp1)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-        self.optimizer_wm.step()
-        for key in loss_items:
-            self.losses[key].append(loss_items[key])
-        if self._its_a_gridworld_bois and store_loss:
-            key = str(x_t.cpu().numpy().tolist()) + str(a_t.cpu().numpy().tolist())
-            if key in self.state_wise_loss_diff:
-                self.state_wise_loss_diff[key]['list'].append(
-                    abs(self.state_wise_loss[key]['list'][-1] - intr_reward.item()))
-            new_d, *_ = self.model.forward_fm_only(x_t, a_t, x_tp1)
-            if key in self.state_wise_loss:
-                self.state_wise_loss[key]['list'].append(new_d)
-            else:
-                self.state_wise_loss[key] = {'d': kwargs['distance'], 'list': [new_d]}
-                self.state_wise_loss_diff[key] = {'d': kwargs['distance'], 'list': []}
-        return intr_reward
-
     def train_d(self, x_t: torch.Tensor):
         x_t = x_t.to(self.device)
         if self.enc_is_vae:
@@ -1034,3 +1021,33 @@ class TabularWorldModel:
         self.losses = checkpoint['losses']
         self.state_wise_loss = checkpoint['state_wise_loss']
         self.state_wise_loss_diff = checkpoint['state_wise_loss_diff']
+
+
+class CountBasedWorldModel:
+    def __init__(self, obs_dim, a_dim, **kwargs):
+        self.obs_dim = obs_dim
+        self.a_dim = a_dim
+        self.predictions = {}
+        self.train_steps = 0
+        self.losses = {'wm_loss': []}
+
+    def train(self, s_t, a_t, s_tp1, **kwargs):
+        # type: (torch.Tensor, torch.Tensor, torch.Tensor, dict) -> torch.Tensor
+        assert len(s_t.shape) == 1
+        assert len(a_t.shape) == 1
+        if len(s_tp1.shape) == 2:
+            s_tp1 = s_tp1.squeeze(0)
+        assert len(s_tp1.shape) == 1
+        s_t_key = str(s_t.cpu().numpy().tolist())
+        a_t = a_t[0]
+        if s_t_key not in self.predictions:
+            self.predictions[s_t_key] = [0 for _ in range(self.a_dim[0])]
+        self.predictions[s_t_key][a_t] += 1
+        # r_int = 1 / np.sqrt(self.predictions[s_t_key][a_t])
+        r_int = 1 / self.predictions[s_t_key][a_t]
+        self.losses['wm_loss'].append(r_int)
+        self.train_steps += 1
+        return torch.tensor(r_int)
+
+    def save(self, folder_path):
+        pass
