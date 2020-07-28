@@ -140,7 +140,7 @@ def fill_buffer(env, alg, buffer, obs_dim, **kwargs):
 
 
 def main(env, visualise, folder_name, **kwargs):
-    shutil.copyfile(os.path.abspath(__file__), folder_name + 'test_ac_tabular_grid.py')
+    shutil.copyfile(os.path.abspath(__file__), folder_name + 'test_ac_dqn_2D.py')
     shutil.copyfile(os.path.dirname(os.path.realpath(__file__)) + '/modules/world_models/world_model.py',
                     folder_name + 'world_model.py')
     buffer = DynamicsReplayBuffer(kwargs['buffer_size'])
@@ -151,7 +151,7 @@ def main(env, visualise, folder_name, **kwargs):
            (obs_dim[0] == 3 * kwargs['frame_stack'] and not kwargs['grayscale']), \
         f'Expected channels first. Received: {obs_dim}'
     a_dim = (env.action_space.n,)
-    device = 'cpu'#'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('Device:', device)
     alg = DQN(obs_dim, a_dim, device=device, **kwargs)
     if kwargs['encoder_type'] == 'cont':
