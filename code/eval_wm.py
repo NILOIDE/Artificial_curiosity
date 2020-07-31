@@ -50,7 +50,7 @@ def get_env_instance(env_name):
     return env
 
 
-def eval_wm(wm, q_values, folder_name, env_name, save_name=None):
+def eval_wm(wm, q_values, folder_name, env_name, separate_enc=None, save_name=None):
     print('Evaluating...')
     size = size_from_env_name(env_name)
     env = get_env_instance(env_name)
@@ -75,6 +75,11 @@ def eval_wm(wm, q_values, folder_name, env_name, save_name=None):
                 if isinstance(wm, EncodedWorldModel) or isinstance(wm, WorldModelContrastive):
                     z_tp1_p = wm.next(s.reshape((-1,)), torch.tensor([a]))
                     z_tp1 = wm.encode(torch.from_numpy(ns).type(torch.float))
+                    prediction_error[i, j] += (z_tp1_p - z_tp1).abs().sum().item() / 2 / a_dim
+                elif separate_enc is not None:
+                    z_t = separate_enc.encode(s.reshape((-1,)))
+                    z_tp1_p = wm.next(z_t, torch.tensor([a]))
+                    z_tp1 = separate_enc.encode(torch.from_numpy(ns).type(torch.float))
                     prediction_error[i, j] += (z_tp1_p - z_tp1).abs().sum().item() / 2 / a_dim
                 else:
                     pns = wm.next(s.reshape((-1,)), torch.tensor([a])).numpy()

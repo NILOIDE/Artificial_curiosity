@@ -737,12 +737,7 @@ class WorldModelContrastive:
             x_t = x_t.unsqueeze(0)
         if len(x_tp1.shape) == 1:
             x_tp1 = x_tp1.unsqueeze(0)
-        # for i in range(10):
-        #     self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
-        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
-        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
-        # self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
         # int_reward = self.train_contrastive_enc_and_fm(x_t, a_t, x_tp1, **kwargs)
         return int_reward

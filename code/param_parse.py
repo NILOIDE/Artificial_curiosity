@@ -30,7 +30,7 @@ def parse_args():
     parser.add_argument('--wm_target_net_steps', type=int, default=0)
     parser.add_argument('--wm_soft_target', type=bool, default=False)
     parser.add_argument('--wm_lr', type=float, default=1e-3)
-    parser.add_argument('--wm_enc_lr', type=float, default=1e-2)
+    parser.add_argument('--wm_enc_lr', type=float, default=1e-4)
     parser.add_argument('--wm_tau', type=float, default=0.01)
     parser.add_argument('--wm_warmup_steps', type=int, default=0)
     parser.add_argument('--intr_rew_norm_type', type=str, default='whiten_history',
@@ -38,7 +38,11 @@ def parse_args():
     parser.add_argument('--intr_rew_mean_n', help='Length of history in running mean', type=int, default=1000)
 
     parser.add_argument('--encoder_type', type=str, default="cont",
-                        choices=['count', 'tab', 'none', 'random', 'cont', 'idf', 'vae'])
+                        choices=['none', 'random', 'cont', 'idf', 'vae'])
+    parser.add_argument('--wm_type', type=str, default="tab",
+                        choices=['tab', 'nn', 'count'])
+    parser.add_argument('--encoder_load_path', type=str, default='final_results/GridWorldRandFeatures42x42-v0/2020-07-29_05-08-51-433042_-uniform_pretain3M_lr3_cont_1/')
+    # parser.add_argument('--encoder_load_path', type=str, deafult=None)
     parser.add_argument('--decoder', type=bool, default=False)
     parser.add_argument('--resize_dim', type=str, default='(84, 84)')
     parser.add_argument('--grayscale', type=bool, default=True)
@@ -51,7 +55,7 @@ def parse_args():
     parser.add_argument('--hinge_value', type=float, default=0.1)
     parser.add_argument('--idf_inverse_hdim', type=str, default='(64,)')
 
-    parser.add_argument('--gridworld_ns_pool', type=str, default="visited", choices=['visited', 'uniform', 'visited_uniform'])
+    parser.add_argument('--gridworld_ns_pool', type=str, default="uniform", choices=['visited', 'uniform', 'visited_uniform'])
 
     args = parser.parse_args().__dict__
     args['time_stamp'] = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")

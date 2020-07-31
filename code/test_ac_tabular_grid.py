@@ -101,42 +101,63 @@ def main(env, visualise, folder_name, **kwargs):
     assert len(obs_dim) == 1, f'States should be 1D vector. Received: {obs_dim}'
     a_dim = (env.action_space.n,)
     alg = TabularQlearning(obs_dim, a_dim, kwargs['gamma'], kwargs['eps_min'])
-    if kwargs['encoder_type'] == 'tab':
-        wm = TabularWorldModel(obs_dim, a_dim, kwargs['wm_lr'], **kwargs)
+    enc, wm, has_separate_encoder = None, None, False
+    if kwargs['encoder_type'] == 'none':
         device = 'cpu'
-    elif kwargs['encoder_type'] == 'count':
-        wm = CountBasedWorldModel(obs_dim, a_dim, **kwargs)
-        device = 'cpu'
+        if kwargs['wm_type'] == 'tab':
+            wm = TabularWorldModel(obs_dim, a_dim, kwargs['wm_lr'], **kwargs)
+        elif kwargs['wm_type'] == 'count':
+            wm = CountBasedWorldModel(obs_dim, a_dim, **kwargs)
+        elif kwargs['wm_type'] == 'none':
+            wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
     else:
         device = 'cpu' #'cuda' if torch.cuda.is_available() else 'cpu'
-        if kwargs['encoder_type'] == 'none':
-            wm = WorldModelNoEncoder(obs_dim, a_dim, device=device, **kwargs)
-        elif kwargs['encoder_type'] == 'cont':
+        if kwargs['encoder_type'] == 'cont':
             wm = WorldModelContrastive(obs_dim, a_dim, device=device, **kwargs)
+            if kwargs['wm_type'] == 'tab':
+                has_separate_encoder = True
+                enc = wm
+                wm = TabularWorldModel(kwargs['z_dim'], a_dim, kwargs['wm_lr'], **kwargs)
+            elif kwargs['wm_type'] == 'count':
+                has_separate_encoder = True
+                enc = wm
+                wm = CountBasedWorldModel(kwargs['z_dim'], a_dim, **kwargs)
         else:
             wm = EncodedWorldModel(obs_dim, a_dim, device=device, **args)
+            if kwargs['wm_type'] == 'tab':
+                has_separate_encoder = True
+                enc = wm
+                wm = TabularWorldModel(kwargs['z_dim'], a_dim, kwargs['wm_lr'], **kwargs)
+            elif kwargs['wm_type'] == 'count':
+                has_separate_encoder = True
+                enc = wm
+                wm = CountBasedWorldModel(kwargs['z_dim'], a_dim, **kwargs)
     ep_scores = {'DQN': [0.0], 'Mean intrinsic reward': [0.0]}
     start_time = datetime.now()
     total_history = {'ext': [], 'int': []}
     cont_buffer = DynamicsReplayBuffer(get_env_instance(kwargs['env_name']).history_len)
-    cont_visited = False if not kwargs['gridworld_ns_pool'] == 'visited' else True
-    cont_visited_uniform = False if not kwargs['gridworld_ns_pool'] == 'visited_uniform' else True
+    cont_visited = True if kwargs['gridworld_ns_pool'] == 'visited' else False
+    cont_visited_uniform = True if kwargs['gridworld_ns_pool'] == 'visited_uniform' else False
     if kwargs['encoder_type'] == 'cont' and kwargs['gridworld_ns_pool'] == 'uniform':
-        # cont_buffer = torch.from_numpy(get_env_instance(kwargs['env_name']).get_states()).to(dtype=torch.float32)
         for s in get_env_instance(kwargs['env_name']).get_states():
             cont_buffer.add(s, None, None, None)
-    wm.save(folder_name + 'saved_objects/')
-    if kwargs['encoder_type'] == 'cont':
-        # wm.load_encoder('final_results/GridWorld42x42-v0/2020-07-25_00-56-30-805054_-_uniform_lr-2_encPretrain2M_noEncTrain_cont_3/' + 'saved_objects/trained_encoder.pt')
-        # warmup_enc(env, alg, wm, cont_buffer, visualise, device, **kwargs)
-        warmup_enc_all_states(wm, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
-        wm.save_encoder(folder_name + 'saved_objects/')
+        if kwargs['encoder_load_path'] is not None and kwargs['encoder_load_path'] != '':
+            if has_separate_encoder:
+                enc.load_encoder(kwargs['encoder_load_path'] + 'saved_objects/trained_encoder.pt')
+                warmup_enc_all_states(enc, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
+                enc.save_encoder(folder_name + 'saved_objects/')
+            else:
+                wm.load_encoder(kwargs['encoder_load_path'] + 'saved_objects/trained_encoder.pt')
+                warmup_enc_all_states(wm, env, folder_name, start_time, buffer=cont_buffer, device=device, **kwargs)
+                wm.save_encoder(folder_name + 'saved_objects/')
+    # Evaluate
     pe_map, q_map, walls_map = None, None, None
     if not isinstance(wm, CountBasedWorldModel):
-        pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
+        pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'], separate_enc=enc)
     visualise.eval_gridworld_iteration_update(pe_map=pe_map,
                                               q_map=q_map,
                                               walls_map=walls_map)
+    # Train
     while alg.train_steps < kwargs['train_steps']:
         s_t = env.reset()
         done = False
@@ -150,9 +171,11 @@ def main(env, visualise, folder_name, **kwargs):
             if alg.train_steps < kwargs['train_steps']:
                 # extra_args = {'memories': cont_buffer, 'distance': info['distance']}
                 extra_args = {'memories': cont_buffer}
-                r_int_t = wm.train(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
-                                   torch.tensor([a_t], device=device),
-                                   torch.from_numpy(s_tp1).to(dtype=torch.float32, device=device).unsqueeze(0),
+                x_t = torch.from_numpy(s_t).to(dtype=torch.float32, device=device)
+                x_tp1 = torch.from_numpy(s_tp1).to(dtype=torch.float32, device=device).unsqueeze(0)
+                if has_separate_encoder:
+                    x_t, x_tp1 = enc.encode(x_t), enc.encode(x_tp1)
+                r_int_t = wm.train(x_t, torch.tensor([a_t], device=device), x_tp1,
                                    **extra_args).cpu().item()
                 # r_int_t = wm.train_contrastive_fm(torch.from_numpy(s_t).to(dtype=torch.float32, device=device),
                 #                                   torch.tensor([a_t], device=device),
@@ -185,7 +208,7 @@ def main(env, visualise, folder_name, **kwargs):
                         draw_heat_map(info['density'], alg.train_steps, folder_name)
                         pe_map, q_map, walls_map = None, None, None
                         if not isinstance(wm, CountBasedWorldModel):
-                            pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'])
+                            pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'], separate_enc=enc)
                         visualise.eval_gridworld_iteration_update(density_map=info['density'],
                                                                   pe_map=pe_map,
                                                                   q_map=q_map,
@@ -220,11 +243,11 @@ def main(env, visualise, folder_name, **kwargs):
 if __name__ == "__main__":
 
     args = parse_args()
-    args['env_name'] = 'GridWorldSpiral28x28-v0'
+    args['env_name'] = 'GridWorldRandFeatures42x42-v0'
     np.random.seed(args['seed'])
     random.seed(args['seed'])
     torch.manual_seed(args['seed'])
-    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}-{args['name']}_{args['encoder_type']}_{args['seed']}/"
+    run_name = f"{args['save_dir']}{args['env_name']}/{args['time_stamp']}_-{args['name']}_{args['wm_type']}_{args['encoder_type']}_{args['seed']}/"
     print(run_name)
     environment = gym.make(args['env_name'])
     visualise = Visualise(run_name, **args)
