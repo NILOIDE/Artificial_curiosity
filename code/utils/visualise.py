@@ -45,7 +45,8 @@ class Visualise:
         if t is None:
             t = self.train_id
             self.train_id += self.train_interval
-            self.writer.add_scalar("Training/WM loss", kwargs['wm_loss'], t)
+            if 'wm_loss' in kwargs:
+                self.writer.add_scalar("Training/WM loss", kwargs['wm_loss'], t)
             if 'wm_t_loss' in kwargs:
                 self.writer.add_scalar("Training/WM translation loss", kwargs['wm_trans_loss'], t)
             if 'wm_ns_loss' in kwargs:
@@ -54,7 +55,8 @@ class Visualise:
                 self.writer.add_scalar("Training/WM inverse model loss", kwargs['wm_inv_loss'], t)
             if 'wm_vae_loss' in kwargs:
                 self.writer.add_scalar("Training/WM VAE loss", kwargs['wm_vae_loss'], t)
-            self.writer.add_scalar("Training/Policy loss", kwargs['alg_loss'], t)
+            if 'alg_loss' in kwargs:
+                self.writer.add_scalar("Training/Policy loss", kwargs['alg_loss'], t)
             if 'info' in kwargs:
                 if 'unique_states' in kwargs['info']:
                     self.writer.add_scalar("Training/Unique states visited",

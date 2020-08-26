@@ -181,17 +181,19 @@ def main(env, visualise, folder_name, **kwargs):
             total[1] += 1
             buffer.add(s_t, a_t, s_tp1, done)
             if alg.train_steps < kwargs['train_steps']:
-                batch = buffer.sample(kwargs['batch_size'])
-                obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
-                r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
-                intr_reward_bookkeeping(r_int_t, total_history, intr_rew_norm, kwargs['intr_rew_mean_n'])
-                if intr_rew_norm is not None:
-                    r_int_t = normalize_rewards(r_int_t, total_history, intr_rew_norm)
-                alg.train(obs_t_batch, a_t_batch, r_int_t, obs_tp1_batch, dones_batch)
+            #     batch = buffer.sample(kwargs['batch_size'])
+            #     obs_t_batch, a_t_batch, obs_tp1_batch, dones_batch = transition_to_torch_no_r(*batch)
+            #     r_int_t = wm.train(obs_t_batch, a_t_batch, obs_tp1_batch, **{'memories': buffer})
+            #     intr_reward_bookkeeping(r_int_t, total_history, intr_rew_norm, kwargs['intr_rew_mean_n'])
+            #     if intr_rew_norm is not None:
+            #         r_int_t = normalize_rewards(r_int_t, total_history, intr_rew_norm)
+            #     alg.train(obs_t_batch, a_t_batch, r_int_t, obs_tp1_batch, dones_batch)
+                alg.train_steps += 1
+                alg.losses.append(0.0)
 
                 if done:
                     total_history['ext'].append(total[0])
-                    total_history['len'].append(total[1])
+                    # total_history['len'].append(total[1])
                 if alg.train_steps % kwargs['export_interval'] == 0:
                     ep_scores['DQN'].append(np.mean(total_history['ext'][-10:]))
                     ep_scores['Mean intrinsic reward'].append(total_history['int']['mean']['running_mean'])

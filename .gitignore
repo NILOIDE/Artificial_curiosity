@@ -9,6 +9,7 @@ code/results/
 code/results_grid/
 code/results_test/
 code/final_results/
+code/submission_files/out_files
 
 # C extensions
 *.so

@@ -4,7 +4,7 @@ np.set_printoptions(linewidth=400)
 import gym
 import grid_gym
 from grid_gym.envs.grid_world import *
-from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder, TabularWorldModel, WorldModelContrastive
+from modules.world_models.world_model import EncodedWorldModel, WorldModelNoEncoder, TabularWorldModel, WorldModelContrastive, CountBasedWorldModel
 import os
 import matplotlib.pyplot as plt
 plt.ioff()
@@ -55,7 +55,9 @@ def eval_wm(wm, q_values, folder_name, env_name, separate_enc=None, save_name=No
     size = size_from_env_name(env_name)
     env = get_env_instance(env_name)
     a_dim = env.action_space.n
-    prediction_error = np.zeros(size)
+    prediction_error = None
+    if isinstance(wm, CountBasedWorldModel):
+        prediction_error = np.zeros(size)
     # Map where Max Q-values will be plotted into
     q_grid = np.zeros(size)
     for i in range(size[0]):
@@ -68,6 +70,7 @@ def eval_wm(wm, q_values, folder_name, env_name, separate_enc=None, save_name=No
                 env.pos = [i, j]
                 ns = env.step(a)[0]
                 # Map Q-values
+
                 q = q_values.forward(s.reshape((-1,)).numpy(), a)
                 if q > q_grid[i, j]:
                     q_grid[i, j] = q
@@ -81,12 +84,15 @@ def eval_wm(wm, q_values, folder_name, env_name, separate_enc=None, save_name=No
                     z_tp1_p = wm.next(z_t, torch.tensor([a]))
                     z_tp1 = separate_enc.encode(torch.from_numpy(ns).type(torch.float))
                     prediction_error[i, j] += (z_tp1_p - z_tp1).abs().sum().item() / 2 / a_dim
+                elif isinstance(wm, CountBasedWorldModel) or prediction_error is None:
+                    pass
                 else:
                     pns = wm.next(s.reshape((-1,)), torch.tensor([a])).numpy()
                     prediction_error[i, j] += np.sum(np.abs(ns - pns))/2/a_dim
     if save_name is not None:
         os.makedirs(folder_name + "/heat_maps/", exist_ok=True)
-        draw_heat_map(prediction_error, folder_name + "/heat_maps/pred_error.png", 'prediction error')
+        if isinstance(wm, CountBasedWorldModel) or prediction_error is None:
+            draw_heat_map(prediction_error, folder_name + "/heat_maps/pred_error.png", 'prediction error')
         draw_heat_map(q_grid, folder_name + "/heat_maps/q_values.png", 'Q-values')
     walls_map = None
     if hasattr(env, 'map'):

@@ -255,11 +255,9 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                 if not isinstance(kwargs['memories'], torch.Tensor):
                     neg_samples = torch.from_numpy(kwargs['memories'].sample_states(self.neg_samples)).to(
                         dtype=torch.float32, device=self.device)
-                    # neg_samples = kwargs['memories'].sample_states(self.neg_samples)
                 else:
                     neg_samples = kwargs['memories']
                 loss_ns = self.calculate_contrastive_loss(neg_samples, z_t=z_t, pos_examples_z=z_tp1)
-                # loss_ns = self.calculate_neg_example_loss(neg_samples, z_t=z_t)
                 loss = (loss_trans + loss_ns).mean()
             else:
                 loss = loss_trans.mean()
@@ -269,22 +267,6 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                          'wm_trans_loss': loss_trans.detach().mean().item(),
                          'wm_ns_loss': loss_ns.detach().mean().item()}
         return loss_trans.detach(), loss, loss_dict
-
-    # def calculate_neg_example_loss(self, neg_examples, x_t=None, z_t=None):
-    #     # type: (torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]
-    #     if z_t is None:
-    #         assert x_t is not None, "Either x_t or z_t should be None."
-    #         z_t = self.encoder(x_t)
-    #     else:
-    #         assert x_t is None, "Either x_t or z_t should be None."
-    #     if len(tuple(z_t.shape)) == 1:  # Add batch dimension to 1D tensor
-    #         z_t = z_t.unsqueeze(0)
-    #     assert len(tuple(neg_examples.shape)) == 2
-    #
-    #     neg_samples_z = self.encoder(neg_examples)
-    #     neg_samples_z = neg_samples_z.unsqueeze(0)
-    #     neg_samples_z = neg_samples_z.repeat((z_t.shape[0], 1, 1))
-    #     return self.loss_func_neg_sampling(z_t, neg_samples_z).mean()
 
     def calculate_contrastive_loss(self, neg_examples, x_t=None, z_t=None, pos_examples=None, pos_examples_z=None):
         # type: (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor) -> [torch.Tensor]
@@ -323,7 +305,8 @@ class DeterministicContrastiveEncodedFM(nn.Module):
                         "There should be an equal amount of pos examples per z."
                     pos_examples_z = pos_examples_z.view((z_t.shape[0], pos_examples_z.shape[0] // z_t.shape[0], -1))
             z_t_expanded = z_t.unsqueeze(1).repeat((1, pos_examples_z.shape[1], 1))
-            pos_loss = (z_t_expanded - pos_examples_z).pow(2).sum(dim=2).clamp(min=self.loss_func_neg_sampling.hinge).mean(dim=1)
+            pos_loss = (z_t_expanded - pos_examples_z).pow(2).sum(dim=2) - self.loss_func_neg_sampling.hinge
+            pos_loss = pos_loss.clamp(min=0.0).mean(dim=1)
             loss += pos_loss
         return loss.mean()
 
@@ -737,6 +720,8 @@ class WorldModelContrastive:
             x_t = x_t.unsqueeze(0)
         if len(x_tp1.shape) == 1:
             x_tp1 = x_tp1.unsqueeze(0)
+        # for i in range(10):
+        #     self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         self.train_contrastive_encoder(x_t, kwargs['memories'], positive_examples=x_tp1)
         int_reward = self.train_contrastive_fm(x_t, a_t, x_tp1, **kwargs)
         # int_reward = self.train_contrastive_enc_and_fm(x_t, a_t, x_tp1, **kwargs)

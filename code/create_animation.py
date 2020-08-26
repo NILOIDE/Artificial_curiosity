@@ -15,7 +15,7 @@ def create_animation(filenames, save_path):
 
 
 def all_folders():
-    parent = 'results_test/' + 'GridWorldSpiral28x28-v0/'
+    parent = 'final_results/' + 'GridWorldSpiral28x28-v0/'
     for path in [parent + i + '/heat_maps/' for i in os.listdir(parent)]:
         print(path)
         if not os.path.isdir(path):
