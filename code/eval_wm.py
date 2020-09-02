@@ -70,7 +70,6 @@ def eval_wm(wm, q_values, folder_name, env_name, separate_enc=None, save_name=No
                 env.pos = [i, j]
                 ns = env.step(a)[0]
                 # Map Q-values
-
                 q = q_values.forward(s.reshape((-1,)).numpy(), a)
                 if q > q_grid[i, j]:
                     q_grid[i, j] = q

@@ -110,7 +110,6 @@ def gather_data_tensorboard(directory):
     if l:
         data_clean.append(take_average(name_map['random'], l))
     l = [d['list'] for d in data if d['name'][:-2] == 'pretrain_cont']
-    a = l[0]
     if l:
         data_clean.append(take_average(name_map['pretrain_cont'], l))
     l = [d['list'] for d in data if d['name'][:-2] == 'uniform_cont']

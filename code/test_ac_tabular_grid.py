@@ -155,7 +155,6 @@ def main(env, visualise, folder_name, **kwargs):
             wm.save_encoder(folder_name + 'saved_objects/')
     # Evaluate
     pe_map, q_map, walls_map = None, None, None
-    # if not isinstance(wm, CountBasedWorldModel):
     pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'], separate_enc=enc)
     visualise.eval_gridworld_iteration_update(pe_map=pe_map,
                                               q_map=q_map,
@@ -207,7 +206,6 @@ def main(env, visualise, folder_name, **kwargs):
                     if kwargs['env_name'][:9] == 'GridWorld':
                         draw_heat_map(info['density'], alg.train_steps, folder_name)
                         pe_map, q_map, walls_map = None, None, None
-                        # if not isinstance(wm, CountBasedWorldModel):
                         pe_map, q_map, walls_map = eval_wm(wm, alg, folder_name, kwargs['env_name'], separate_enc=enc)
                         visualise.eval_gridworld_iteration_update(density_map=info['density'],
                                                                   pe_map=pe_map,

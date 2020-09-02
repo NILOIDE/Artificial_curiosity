@@ -22,6 +22,7 @@ name_map = {'eps1_tab': 'Random policy ($\epsilon = 1.0$)',
 
 
 def gather_data_tensorboard(directory):
+    # Retrieve images from the tensorboard file
     folder = directory + '2020-08-07_15-26-15-186475_-__count_none_4/events.out.tfevents.1596806775.LAPTOP-NST0I3T8'
     print(folder)
     event_acc = EventAccumulator(folder, size_guidance={'images':100}, compression_bps='images')
@@ -30,7 +31,8 @@ def gather_data_tensorboard(directory):
     print(event_acc.Tags())
     # if folder[-4:] == 'eps1':
     #     value_name = 'Training/Mean_ep_extrinsic_rewards'
-    # # E. g. get wall clock, number of steps and value for a scalar 'Accuracy'
+
+    # E. g. get wall clock, number of steps and value for a scalar 'Accuracy'
     if not value_name in event_acc.Tags()['images']:
         print('nope')
         quit()
@@ -45,7 +47,6 @@ def gather_data_tensorboard(directory):
         lis.append(tf_img)
         fig = plt.figure(p)
         ax = plt.subplot(111)
-
         ax.imshow(tf_img)
 
     decode(100000//20000)
@@ -62,11 +63,6 @@ def plot(save_path, data):
     for i, y in enumerate(data):
         x = np.arange(0, len(y['mean'])) *500*4
         x = x.tolist()
-        # if i == len(data) -2:
-        #     ax.plot(x, y['mean'], 'c', label=y['name'])
-        # elif i == len(data) - 1:
-        #     ax.plot(x, y['mean'], 'y', label=y['name'])
-        # else:
         ax.plot(x, y['mean'], label=y['name'])
 
         ax.fill_between(x, y['mean'] - y['std'], y['mean'] + y['std'], alpha=0.25)
@@ -81,7 +77,6 @@ def plot(save_path, data):
     # ax.set_title('Number of unique visited states in recent history (last ~35K steps)')
     # ax.set_title('Difference between policy and uniform visitation probability\nin recent history (last ~35K steps) across all states')
     ax.set_title('Difference between policy and uniform visitation probability\nin recent history (last ~35K steps) across visited states')
-    # print(data[2]['name'])
     # ax.set_xlim(-100000, int(6e6)+100000)
 
 if __name__ == "__main__":

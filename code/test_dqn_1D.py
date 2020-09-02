@@ -50,10 +50,8 @@ def evaluate(env_name, alg, wm, obs_dim, n=3):
             s_tp1, r_ext_t, done, _ = env.step(a_t)
             s_tp1 = torch.from_numpy(s_tp1).to(dtype=torch.float32)
             s_tp1 /= 256.0
-            # r_int_t = wm.forward(s_t, torch.tensor([a_t,]), s_tp1)
             s_t = s_tp1
             total['ext'] += r_ext_t
-            # total['int'] += r_int_t.item()
             total['len'] += 1
         returns['ext'].append(total['ext'])
         returns['int'].append(total['int'])
@@ -116,14 +114,14 @@ def main(env, visualise, folder_name, **kwargs):
     print('Training...')
     while alg.train_steps < kwargs['train_steps']:
         s_t = env.reset()
-        # s_t /= 256.0
+        s_t /= 256.0
         # env.render('human')
         done = False
         total = [0, 0]
         while not done:
             a_t = alg.act(torch.from_numpy(s_t).to(dtype=torch.float32)).item()
             s_tp1, r_t, done, _ = env.step(a_t)
-            # s_tp1 /= 256.0
+            s_tp1 /= 256.0
             total[0] += r_t
             total[1] += 1
             buffer.add(s_t, a_t, r_t, s_tp1, done)
